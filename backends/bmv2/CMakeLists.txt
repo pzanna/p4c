@@ -27,6 +27,7 @@ set (BMV2_SIMPLE_SWITCH_SRCS
     simple_switch/midend.h
     simple_switch/simpleSwitch.cpp
     simple_switch/simpleSwitch.h
+    simple_switch/options.h
     )
 add_cpplint_files (${CMAKE_CURRENT_SOURCE_DIR} "${BMV2_SIMPLE_SWITCH_SRCS}")
 
@@ -36,6 +37,7 @@ set (BMV2_PSA_SWITCH_SRCS
     psa_switch/midend.h
     psa_switch/psaSwitch.cpp
     psa_switch/psaSwitch.h
+    psa_switch/options.h
     )
 add_cpplint_files (${CMAKE_CURRENT_SOURCE_DIR} "${BMV2_PSA_SWITCH_SRCS}")
 
@@ -179,9 +181,11 @@ set (XFAIL_TESTS
   testdata/p4_16_samples/issue1765-1-bmv2.p4
   # These tests require bmv2's psa_switch to support std metadata passing at minimum
   testdata/p4_16_samples/psa-ingress-input-meta-bmv2.p4
-  # Next two Use unknown externs
+  # Next two use unknown externs
   testdata/p4_16_samples/issue1882-bmv2.p4
   testdata/p4_16_samples/issue1882-1-bmv2.p4
+  # Uses non-constant array index
+  testdata/p4_16_samples/issue1989-bmv2.p4
 )
 
 if (HAVE_SIMPLE_SWITCH)

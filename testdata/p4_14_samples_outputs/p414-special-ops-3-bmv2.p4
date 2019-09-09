@@ -4,11 +4,8 @@
 struct intrinsic_metadata_t {
     bit<48> ingress_global_timestamp;
     bit<48> egress_global_timestamp;
-    bit<8>  lf_field_list;
     bit<16> mcast_grp;
     bit<16> egress_rid;
-    bit<8>  resubmit_flag;
-    bit<8>  recirculate_flag;
 }
 
 struct mymeta_t {
@@ -126,11 +123,8 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             standard_metadata.instance_type           : exact;
             standard_metadata.ingress_global_timestamp: exact;
             standard_metadata.egress_global_timestamp : exact;
-            standard_metadata.lf_field_list           : exact;
             standard_metadata.mcast_grp               : exact;
             standard_metadata.egress_rid              : exact;
-            standard_metadata.resubmit_flag           : exact;
-            standard_metadata.recirculate_flag        : exact;
             meta.mymeta.resubmit_count                : exact;
             meta.mymeta.recirculate_count             : exact;
             meta.mymeta.clone_e2e_count               : exact;
@@ -154,11 +148,8 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             standard_metadata.instance_type           : exact;
             standard_metadata.ingress_global_timestamp: exact;
             standard_metadata.egress_global_timestamp : exact;
-            standard_metadata.lf_field_list           : exact;
             standard_metadata.mcast_grp               : exact;
             standard_metadata.egress_rid              : exact;
-            standard_metadata.resubmit_flag           : exact;
-            standard_metadata.recirculate_flag        : exact;
             meta.mymeta.resubmit_count                : exact;
             meta.mymeta.recirculate_count             : exact;
             meta.mymeta.clone_e2e_count               : exact;
@@ -214,26 +205,21 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
         t_egr_debug_table1.apply();
         if (hdr.ethernet.dstAddr == 48w0x1) {
             t_egr_mark_resubmit_packet.apply();
-        }
-        else {
+        } else {
             if (hdr.ethernet.dstAddr == 48w0x2) {
                 if (meta.mymeta.recirculate_count < 8w10) {
                     t_do_recirculate.apply();
-                }
-                else {
+                } else {
                     t_mark_max_recirculate_packet.apply();
                 }
-            }
-            else {
+            } else {
                 if (hdr.ethernet.dstAddr == 48w0x3) {
                     if (meta.mymeta.clone_e2e_count < 8w8) {
                         t_do_clone_e2e.apply();
-                    }
-                    else {
+                    } else {
                         t_mark_max_clone_e2e_packet.apply();
                     }
-                }
-                else {
+                } else {
                     t_mark_vanilla_packet.apply();
                 }
             }
@@ -284,11 +270,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             standard_metadata.instance_type           : exact;
             standard_metadata.ingress_global_timestamp: exact;
             standard_metadata.egress_global_timestamp : exact;
-            standard_metadata.lf_field_list           : exact;
             standard_metadata.mcast_grp               : exact;
             standard_metadata.egress_rid              : exact;
-            standard_metadata.resubmit_flag           : exact;
-            standard_metadata.recirculate_flag        : exact;
             meta.mymeta.resubmit_count                : exact;
             meta.mymeta.recirculate_count             : exact;
             meta.mymeta.clone_e2e_count               : exact;
@@ -312,11 +295,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             standard_metadata.instance_type           : exact;
             standard_metadata.ingress_global_timestamp: exact;
             standard_metadata.egress_global_timestamp : exact;
-            standard_metadata.lf_field_list           : exact;
             standard_metadata.mcast_grp               : exact;
             standard_metadata.egress_rid              : exact;
-            standard_metadata.resubmit_flag           : exact;
-            standard_metadata.recirculate_flag        : exact;
             meta.mymeta.resubmit_count                : exact;
             meta.mymeta.recirculate_count             : exact;
             meta.mymeta.clone_e2e_count               : exact;
@@ -365,12 +345,10 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         if (hdr.ethernet.dstAddr == 48w0x1) {
             if (meta.mymeta.resubmit_count < 8w6) {
                 t_do_resubmit.apply();
-            }
-            else {
+            } else {
                 t_mark_max_resubmit_packet.apply();
             }
-        }
-        else {
+        } else {
             t_ing_mac_da.apply();
         }
         t_save_ing_instance_type.apply();

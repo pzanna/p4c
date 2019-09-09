@@ -19,7 +19,7 @@ control IngressImpl(inout headers hdr, inout metadata meta, inout standard_metad
     @name(".NoAction") action NoAction_0() {
     }
     @name("IngressImpl.testRegister") register<bit<1>>(32w1) testRegister_0;
-    @name("IngressImpl.drop") action drop_1() {
+    @name("IngressImpl.drop") action drop() {
         mark_to_drop(standard_metadata);
     }
     @name("IngressImpl.forward") action forward() {
@@ -30,24 +30,24 @@ control IngressImpl(inout headers hdr, inout metadata meta, inout standard_metad
             meta.test: exact @name("meta.test") ;
         }
         actions = {
-            drop_1();
+            drop();
             forward();
             @defaultonly NoAction_0();
         }
         default_action = NoAction_0();
     }
-    @hidden action act() {
+    @hidden action issue18141bmv2l42() {
         testRegister_0.read(registerData_0, 32w0);
         meta.test = (bool)registerData_0;
     }
-    @hidden table tbl_act {
+    @hidden table tbl_issue18141bmv2l42 {
         actions = {
-            act();
+            issue18141bmv2l42();
         }
-        const default_action = act();
+        const default_action = issue18141bmv2l42();
     }
     apply {
-        tbl_act.apply();
+        tbl_issue18141bmv2l42.apply();
         debug_table_0.apply();
     }
 }

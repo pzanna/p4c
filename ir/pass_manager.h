@@ -45,6 +45,7 @@ class PassManager : virtual public Visitor, virtual public Backtrack {
     void addPasses(const std::initializer_list<Visitor *> &init) {
         never_backtracks_cache = -1;
         for (auto p : init) if (p) passes.emplace_back(p); }
+    void removePasses(const std::vector<cstring> &exclude);
     const IR::Node *apply_visitor(const IR::Node *, const char * = 0) override;
     bool backtrack(trigger &trig) override;
     bool never_backtracks() override;
@@ -82,6 +83,15 @@ class PassRepeatUntil : virtual public PassManager {
     PassRepeatUntil(const std::initializer_list<Visitor *> &init,
                     std::function<bool()> done)
     : PassManager(init), done(done) {}
+    const IR::Node *apply_visitor(const IR::Node *, const char * = 0) override;
+};
+
+class PassIf : virtual public PassManager {
+    std::function<bool()>       cond;
+ public:
+    explicit PassIf(std::function<bool()> cond) : cond(cond) {}
+    PassIf(std::function<bool()> cond, const std::initializer_list<Visitor *> &init)
+    : PassManager(init), cond(cond) {}
     const IR::Node *apply_visitor(const IR::Node *, const char * = 0) override;
 };
 

@@ -28,10 +28,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         smeta.ingress_port = standard_metadata.ingress_port;
         smeta.egress_spec = standard_metadata.egress_spec;
         smeta.egress_port = standard_metadata.egress_port;
-        smeta.clone_spec = standard_metadata.clone_spec;
         smeta.instance_type = standard_metadata.instance_type;
-        smeta.drop = standard_metadata.drop;
-        smeta.recirculate_port = standard_metadata.recirculate_port;
         smeta.packet_length = standard_metadata.packet_length;
         smeta.enq_timestamp = standard_metadata.enq_timestamp;
         smeta.enq_qdepth = standard_metadata.enq_qdepth;
@@ -39,11 +36,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         smeta.deq_qdepth = standard_metadata.deq_qdepth;
         smeta.ingress_global_timestamp = standard_metadata.ingress_global_timestamp;
         smeta.egress_global_timestamp = standard_metadata.egress_global_timestamp;
-        smeta.lf_field_list = standard_metadata.lf_field_list;
         smeta.mcast_grp = standard_metadata.mcast_grp;
-        smeta.resubmit_flag = standard_metadata.resubmit_flag;
         smeta.egress_rid = standard_metadata.egress_rid;
-        smeta.recirculate_flag = standard_metadata.recirculate_flag;
         smeta.checksum_error = standard_metadata.checksum_error;
         smeta.parser_error = standard_metadata.parser_error;
         smeta.priority = standard_metadata.priority;
@@ -51,10 +45,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         standard_metadata.ingress_port = smeta.ingress_port;
         standard_metadata.egress_spec = smeta.egress_spec;
         standard_metadata.egress_port = smeta.egress_port;
-        standard_metadata.clone_spec = smeta.clone_spec;
         standard_metadata.instance_type = smeta.instance_type;
-        standard_metadata.drop = smeta.drop;
-        standard_metadata.recirculate_port = smeta.recirculate_port;
         standard_metadata.packet_length = smeta.packet_length;
         standard_metadata.enq_timestamp = smeta.enq_timestamp;
         standard_metadata.enq_qdepth = smeta.enq_qdepth;
@@ -62,11 +53,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         standard_metadata.deq_qdepth = smeta.deq_qdepth;
         standard_metadata.ingress_global_timestamp = smeta.ingress_global_timestamp;
         standard_metadata.egress_global_timestamp = smeta.egress_global_timestamp;
-        standard_metadata.lf_field_list = smeta.lf_field_list;
         standard_metadata.mcast_grp = smeta.mcast_grp;
-        standard_metadata.resubmit_flag = smeta.resubmit_flag;
         standard_metadata.egress_rid = smeta.egress_rid;
-        standard_metadata.recirculate_flag = smeta.recirculate_flag;
         standard_metadata.checksum_error = smeta.checksum_error;
         standard_metadata.parser_error = smeta.parser_error;
         standard_metadata.priority = smeta.priority;
@@ -84,40 +72,41 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = my_drop();
     }
-    @hidden action act() {
+    @hidden action issue1544bmv2l24() {
         retval = hdr.ethernet.srcAddr[15:0] + 16w65535;
     }
-    @hidden action act_0() {
+    @hidden action issue1544bmv2l26() {
         retval = hdr.ethernet.srcAddr[15:0];
     }
-    @hidden action act_1() {
+    @hidden action issue1544bmv2l81() {
         hdr.ethernet.srcAddr[15:0] = retval;
     }
-    @hidden table tbl_act {
+    @hidden table tbl_issue1544bmv2l24 {
         actions = {
-            act();
+            issue1544bmv2l24();
         }
-        const default_action = act();
+        const default_action = issue1544bmv2l24();
     }
-    @hidden table tbl_act_0 {
+    @hidden table tbl_issue1544bmv2l26 {
         actions = {
-            act_0();
+            issue1544bmv2l26();
         }
-        const default_action = act_0();
+        const default_action = issue1544bmv2l26();
     }
-    @hidden table tbl_act_1 {
+    @hidden table tbl_issue1544bmv2l81 {
         actions = {
-            act_1();
+            issue1544bmv2l81();
         }
-        const default_action = act_1();
+        const default_action = issue1544bmv2l81();
     }
     apply {
         mac_da_0.apply();
-        if (hdr.ethernet.srcAddr[15:0] > 16w5) 
-            tbl_act.apply();
-        else 
-            tbl_act_0.apply();
-        tbl_act_1.apply();
+        if (hdr.ethernet.srcAddr[15:0] > 16w5) {
+            tbl_issue1544bmv2l24.apply();
+        } else {
+            tbl_issue1544bmv2l26.apply();
+        }
+        tbl_issue1544bmv2l81.apply();
     }
 }
 

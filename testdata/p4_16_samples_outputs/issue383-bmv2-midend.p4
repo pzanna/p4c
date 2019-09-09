@@ -75,7 +75,7 @@ control ingress(inout parsed_packet_t h, inout local_metadata_t local_metadata, 
         }
         default_action = NoAction_0();
     }
-    @hidden action act() {
+    @hidden action issue383bmv2l104() {
         local_metadata._col_bvh8._row_alt0_valid0 = 1w0;
         local_metadata._row0_alt0_valid0 = local_metadata._row1_alt1_valid6;
         local_metadata._row0_alt0_port1 = local_metadata._row1_alt1_port7;
@@ -83,15 +83,15 @@ control ingress(inout parsed_packet_t h, inout local_metadata_t local_metadata, 
         local_metadata._row1_alt1_port7 = local_metadata._row0_alt1_port3 + 7w1;
         clone3<row_t>(CloneType.I2E, 32w0, row_t {alt0 = alt_t {valid = local_metadata._row1_alt1_valid6,port = local_metadata._row0_alt0_port1},alt1 = alt_t {valid = local_metadata._row0_alt1_valid2,port = local_metadata._row0_alt1_port3}});
     }
-    @hidden table tbl_act {
+    @hidden table tbl_issue383bmv2l104 {
         actions = {
-            act();
+            issue383bmv2l104();
         }
-        const default_action = act();
+        const default_action = issue383bmv2l104();
     }
     apply {
         tns_0.apply();
-        tbl_act.apply();
+        tbl_issue383bmv2l104.apply();
     }
 }
 
@@ -107,7 +107,7 @@ control deparser(packet_out b, in parsed_packet_t h) {
     }
 }
 
-control verify_checksum(inout parsed_packet_t hdr, inout local_metadata_t local_metadata) {
+control verifyChecksum(inout parsed_packet_t hdr, inout local_metadata_t local_metadata) {
     apply {
     }
 }
@@ -117,5 +117,5 @@ control compute_checksum(inout parsed_packet_t hdr, inout local_metadata_t local
     }
 }
 
-V1Switch<parsed_packet_t, local_metadata_t>(parse(), verify_checksum(), ingress(), egress(), compute_checksum(), deparser()) main;
+V1Switch<parsed_packet_t, local_metadata_t>(parse(), verifyChecksum(), ingress(), egress(), compute_checksum(), deparser()) main;
 

@@ -2,9 +2,8 @@
 #include <v1model.p4>
 
 struct intrinsic_metadata_t {
-    bit<4>  mcast_grp;
-    bit<4>  egress_rid;
-    bit<32> lf_field_list;
+    bit<4> mcast_grp;
+    bit<4> egress_rid;
 }
 
 struct meta_t {
@@ -153,8 +152,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
     apply {
         if (standard_metadata.instance_type == 32w0) {
             send_frame.apply();
-        }
-        else {
+        } else {
             send_to_cpu.apply();
         }
     }

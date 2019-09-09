@@ -263,8 +263,9 @@ bool TypeInference::checkParameters(
             typeError("%1%: parameter cannot be a package", p);
             return false;
         }
-        if (p->direction != IR::Direction::None && type->is<IR::Type_Extern>()) {
-            typeError("%1%: a parameter with an extern type cannot have a direction", p);
+        if (p->direction != IR::Direction::None &&
+            (type->is<IR::Type_Extern>() || type->is<IR::Type_String>())) {
+            typeError("%1%: a parameter with type %2% cannot have a direction", p, type);
             return false;
         }
         if ((forbidModules || p->direction != IR::Direction::None) &&
@@ -649,6 +650,11 @@ const IR::Node* TypeInference::postorder(IR::Declaration_Variable* decl) {
         return decl;
     }
 
+    if (type->is<IR::Type_String>()) {
+        typeError("%1%: Cannot declare variables with type %2%", decl, type);
+        return decl;
+    }
+
     auto orig = getOriginal<IR::Declaration_Variable>();
     if (decl->initializer != nullptr) {
         auto init = assignment(decl, type, decl->initializer);
@@ -959,6 +965,8 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
             prune();
             return decl;
         }
+        auto *learn = clone();
+        (void)type->apply(*learn);
         if (args != decl->arguments)
             decl->arguments = args;
         setType(decl, type);
@@ -2344,7 +2352,9 @@ const IR::Node* TypeInference::postorder(IR::PathExpression* expression) {
     } else if (decl->is<IR::Method>() || decl->is<IR::Function>()) {
         type = getType(decl->getNode());
         // Each method invocation uses fresh type variables
-        type = cloneWithFreshTypeVariables(type->to<IR::Type_MethodBase>());
+        if (type != nullptr)
+            // may be nullptr because typechecking may have failed
+            type = cloneWithFreshTypeVariables(type->to<IR::Type_MethodBase>());
     }
 
     if (type == nullptr) {
@@ -2779,7 +2789,8 @@ TypeInference::actionCall(bool inActionList,
     // Check remaining parameters: they must be all non-directional
     bool error = false;
     for (auto p : left) {
-        if (p.second->direction != IR::Direction::None) {
+        if (p.second->direction != IR::Direction::None &&
+            p.second->defaultValue == nullptr) {
             typeError("%1%: Parameter %2% must be bound", actionCall, p.second);
             error = true;
         }

@@ -49,8 +49,7 @@ struct ingress_metadata_t {
 }
 
 struct ingress_intrinsic_metadata_t {
-    bit<9>  ingress_port;
-    bit<32> lf_field_list;
+    bit<9> ingress_port;
 }
 
 header ethernet_t {
@@ -340,18 +339,21 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         port.apply();
         if (meta.ingress_metadata.oper_status == 2w1) {
             router_interface.apply();
-            if (meta.ingress_metadata.learning != 2w0) 
+            if (meta.ingress_metadata.learning != 2w0) {
                 learn_notify.apply();
-            if (meta.ingress_metadata.router_mac == 1w0) 
+            }
+            if (meta.ingress_metadata.router_mac == 1w0) {
                 fdb.apply();
-            else {
+            } else {
                 virtual_router.apply();
-                if (hdr.ipv4.isValid() && meta.ingress_metadata.v4_enable != 1w0) 
+                if (hdr.ipv4.isValid() && meta.ingress_metadata.v4_enable != 1w0) {
                     route.apply();
+                }
                 next_hop.apply();
             }
-            if (meta.ingress_metadata.routed != 1w0) 
+            if (meta.ingress_metadata.routed != 1w0) {
                 neighbor.apply();
+            }
         }
     }
 }

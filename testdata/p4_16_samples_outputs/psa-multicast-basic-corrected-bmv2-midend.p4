@@ -28,7 +28,7 @@ parser IngressParserImpl(packet_in pkt, out headers_t hdr, inout metadata_t user
 control cIngress(inout headers_t hdr, inout metadata_t user_meta, in psa_ingress_input_metadata_t istd, inout psa_ingress_output_metadata_t ostd) {
     @name(".multicast") action multicast() {
         ostd.drop = false;
-        ostd.multicast_group = hdr.ethernet.dstAddr[31:0];
+        ostd.multicast_group = (MulticastGroupUint_t)hdr.ethernet.dstAddr;
     }
     @hidden table tbl_multicast {
         actions = {
@@ -54,32 +54,32 @@ control cEgress(inout headers_t hdr, inout metadata_t user_meta, in psa_egress_i
 }
 
 control IngressDeparserImpl(packet_out buffer, out empty_metadata_t clone_i2e_meta, out empty_metadata_t resubmit_meta, out empty_metadata_t normal_meta, inout headers_t hdr, in metadata_t meta, in psa_ingress_output_metadata_t istd) {
-    @hidden action act() {
+    @hidden action psamulticastbasiccorrectedbmv2l89() {
         buffer.emit<ethernet_t>(hdr.ethernet);
     }
-    @hidden table tbl_act {
+    @hidden table tbl_psamulticastbasiccorrectedbmv2l89 {
         actions = {
-            act();
+            psamulticastbasiccorrectedbmv2l89();
         }
-        const default_action = act();
+        const default_action = psamulticastbasiccorrectedbmv2l89();
     }
     apply {
-        tbl_act.apply();
+        tbl_psamulticastbasiccorrectedbmv2l89.apply();
     }
 }
 
 control EgressDeparserImpl(packet_out buffer, out empty_metadata_t clone_e2e_meta, out empty_metadata_t recirculate_meta, inout headers_t hdr, in metadata_t meta, in psa_egress_output_metadata_t istd, in psa_egress_deparser_input_metadata_t edstd) {
-    @hidden action act_0() {
+    @hidden action psamulticastbasiccorrectedbmv2l89_0() {
         buffer.emit<ethernet_t>(hdr.ethernet);
     }
-    @hidden table tbl_act_0 {
+    @hidden table tbl_psamulticastbasiccorrectedbmv2l89_0 {
         actions = {
-            act_0();
+            psamulticastbasiccorrectedbmv2l89_0();
         }
-        const default_action = act_0();
+        const default_action = psamulticastbasiccorrectedbmv2l89_0();
     }
     apply {
-        tbl_act_0.apply();
+        tbl_psamulticastbasiccorrectedbmv2l89_0.apply();
     }
 }
 

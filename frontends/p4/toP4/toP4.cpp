@@ -202,6 +202,11 @@ bool ToP4::preorder(const IR::Type_Bits* t) {
     return false;
 }
 
+bool ToP4::preorder(const IR::Type_String* t) {
+    builder.append(t->toString());
+    return false;
+}
+
 bool ToP4::preorder(const IR::Type_InfInt* t) {
     builder.append(t->toString());
     return false;
@@ -254,7 +259,7 @@ bool ToP4::preorder(const IR::Type_Specialized* t) {
 
 bool ToP4::preorder(const IR::Argument* arg) {
     if (!arg->name.name.isNullOrEmpty()) {
-        builder.append(arg->name.toString());
+        builder.append(arg->name.name);
         builder.append(" = ");
     }
     visit(arg->expression);
@@ -1051,25 +1056,33 @@ bool ToP4::preorder(const IR::IfStatement* s) {
     visit(s->condition);
     builder.append(") ");
     if (!s->ifTrue->is<IR::BlockStatement>()) {
+        builder.append("{");
         builder.increaseIndent();
         builder.newline();
         builder.emitIndent();
     }
     visit(s->ifTrue);
-    if (!s->ifTrue->is<IR::BlockStatement>())
-        builder.decreaseIndent();
-    if (s->ifFalse != nullptr) {
+    if (!s->ifTrue->is<IR::BlockStatement>()) {
         builder.newline();
+        builder.decreaseIndent();
         builder.emitIndent();
-        builder.append("else ");
-        if (!s->ifFalse->is<IR::BlockStatement>()) {
+        builder.append("}");
+    }
+    if (s->ifFalse != nullptr) {
+        builder.append(" else ");
+        if (!s->ifFalse->is<IR::BlockStatement>() && !s->ifFalse->is<IR::IfStatement>()) {
+            builder.append("{");
             builder.increaseIndent();
             builder.newline();
             builder.emitIndent();
         }
         visit(s->ifFalse);
-        if (!s->ifFalse->is<IR::BlockStatement>())
+        if (!s->ifFalse->is<IR::BlockStatement>() && !s->ifFalse->is<IR::IfStatement>()) {
+            builder.newline();
             builder.decreaseIndent();
+            builder.emitIndent();
+            builder.append("}");
+        }
     }
     return false;
 }

@@ -29,7 +29,7 @@ control cIngress(inout headers_t hdr, inout metadata_t user_meta, in psa_ingress
     @name(".send_to_port") action send_to_port() {
         ostd.drop = false;
         ostd.multicast_group = 32w0;
-        ostd.egress_port = (PortIdUint_t)hdr.ethernet.dstAddr[1:0];
+        ostd.egress_port = (PortIdUint_t)hdr.ethernet.dstAddr;
     }
     @name(".ingress_drop") action ingress_drop() {
         ostd.drop = true;
@@ -48,8 +48,9 @@ control cIngress(inout headers_t hdr, inout metadata_t user_meta, in psa_ingress
     }
     apply {
         tbl_send_to_port.apply();
-        if (hdr.ethernet.dstAddr[1:0] == 2w0) 
+        if (hdr.ethernet.dstAddr == 48w0) {
             tbl_ingress_drop.apply();
+        }
     }
 }
 
@@ -66,32 +67,32 @@ control cEgress(inout headers_t hdr, inout metadata_t user_meta, in psa_egress_i
 }
 
 control IngressDeparserImpl(packet_out buffer, out empty_metadata_t clone_i2e_meta, out empty_metadata_t resubmit_meta, out empty_metadata_t normal_meta, inout headers_t hdr, in metadata_t meta, in psa_ingress_output_metadata_t istd) {
-    @hidden action act() {
+    @hidden action psaunicastordropcorrectedbmv2l100() {
         buffer.emit<ethernet_t>(hdr.ethernet);
     }
-    @hidden table tbl_act {
+    @hidden table tbl_psaunicastordropcorrectedbmv2l100 {
         actions = {
-            act();
+            psaunicastordropcorrectedbmv2l100();
         }
-        const default_action = act();
+        const default_action = psaunicastordropcorrectedbmv2l100();
     }
     apply {
-        tbl_act.apply();
+        tbl_psaunicastordropcorrectedbmv2l100.apply();
     }
 }
 
 control EgressDeparserImpl(packet_out buffer, out empty_metadata_t clone_e2e_meta, out empty_metadata_t recirculate_meta, inout headers_t hdr, in metadata_t meta, in psa_egress_output_metadata_t istd, in psa_egress_deparser_input_metadata_t edstd) {
-    @hidden action act_0() {
+    @hidden action psaunicastordropcorrectedbmv2l100_0() {
         buffer.emit<ethernet_t>(hdr.ethernet);
     }
-    @hidden table tbl_act_0 {
+    @hidden table tbl_psaunicastordropcorrectedbmv2l100_0 {
         actions = {
-            act_0();
+            psaunicastordropcorrectedbmv2l100_0();
         }
-        const default_action = act_0();
+        const default_action = psaunicastordropcorrectedbmv2l100_0();
     }
     apply {
-        tbl_act_0.apply();
+        tbl_psaunicastordropcorrectedbmv2l100_0.apply();
     }
 }
 

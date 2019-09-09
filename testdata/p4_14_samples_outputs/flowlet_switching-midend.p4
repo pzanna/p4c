@@ -12,7 +12,6 @@ struct ingress_metadata_t {
 
 struct intrinsic_metadata_t {
     bit<48> ingress_global_timestamp;
-    bit<32> lf_field_list;
     bit<16> mcast_grp;
     bit<16> egress_rid;
 }
@@ -236,8 +235,9 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     }
     apply {
         flowlet_0.apply();
-        if (meta._ingress_metadata_flow_ipg0 > 32w50000) 
+        if (meta._ingress_metadata_flow_ipg0 > 32w50000) {
             new_flowlet_0.apply();
+        }
         ecmp_group_0.apply();
         ecmp_nhop_0.apply();
         forward_0.apply();
