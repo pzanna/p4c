@@ -23,6 +23,7 @@ const cstring TableImplementation::actionProfileName = "action_profile";
 const cstring TableImplementation::actionSelectorName = "action_selector";
 const cstring MatchImplementation::selectorMatchTypeName = "selector";
 const cstring MatchImplementation::rangeMatchTypeName = "range";
+const cstring MatchImplementation::optionalMatchTypeName = "optional";
 const unsigned TableAttributes::defaultTableSize = 1024;
 const cstring V1ModelProperties::jsonMetadataParameterName = "standard_metadata";
 const cstring V1ModelProperties::validField = "$valid$";
@@ -57,24 +58,21 @@ Util::JsonObject* mkPrimitive(cstring name) {
     return result;
 }
 
-cstring stringRepr(mpz_class value, unsigned bytes) {
+cstring stringRepr(big_int value, unsigned bytes) {
     cstring sign = "";
-    const char* r;
+    std::stringstream r;
     cstring filler = "";
     if (value < 0) {
         value =- value;
-        r = mpz_get_str(nullptr, 16, value.get_mpz_t());
-        sign = "-";
-    } else {
-        r = mpz_get_str(nullptr, 16, value.get_mpz_t());
-    }
+        sign = "-"; }
+    r << std::hex << value;
 
     if (bytes > 0) {
-        int digits = bytes * 2 - strlen(r);
+        int digits = bytes * 2 - r.str().size();
         BUG_CHECK(digits >= 0, "Cannot represent %1% on %2% bytes", value, bytes);
         filler = std::string(digits, '0');
     }
-    return sign + "0x" + filler + r;
+    return sign + "0x" + filler + r.str();
 }
 
 unsigned nextId(cstring group) {

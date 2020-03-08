@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/usr/bin/env python2
 
 """
 p4c - P4 Compiler Driver
 
 """
 
-from __future__ import absolute_import
+
 import argparse
 import glob
 import os
@@ -98,7 +97,7 @@ def main():
     parser.add_argument("-a", "--arch", dest="arch",
                         help="specify target architecture",
                         action="store", default="v1model")
-    parser.add_argument("-c", dest="run_all",
+    parser.add_argument("-c", "--compile", dest="run_all",
                         help="Only run preprocess, compile, and assemble steps",
                         action="store_true", default=True)
     parser.add_argument("-D", dest="preprocessor_defines",
@@ -144,6 +143,10 @@ def main():
                         dest="show_target_help",
                         help="Display target specific command line options.",
                         action="store_true", default=False)
+    parser.add_argument("--disable-annotations", "--disable-annotation",
+                        "--disable-pragmas", "--disable-pragma",
+                        dest="disabled_annos", action="store",
+                        help="List of annotations (comma separated) that should be ignored by the compiler.")
     parser.add_argument("-S", dest="run_till_assembler",
                         help="Only run the preprocess and compilation steps",
                         action="store_true", default=False)
@@ -189,11 +192,11 @@ def main():
 
     # deal with early exits
     if opts.show_version:
-        print "p4c", get_version()
+        print("p4c", get_version())
         sys.exit(0)
 
     if opts.show_target_help:
-        print display_supported_targets(cfg)
+        print(display_supported_targets(cfg))
         sys.exit(0)
 
     # When using --help-* options, we don't necessarily need to pass an input file
@@ -220,7 +223,8 @@ def main():
             opts.source_file = opts.json_source
 
     if checkInput and not os.path.isfile(opts.source_file):
-        print >> sys.stderr, 'Input file ' + opts.source_file + ' does not exist'
+        print('Input file {} does not exist'.format(opts.source_file),
+              file = sys.stderr)
         sys.exit(1)
 
     # check that the tuple value is correct
@@ -238,7 +242,8 @@ def main():
             backend = target
             break
     if backend == None:
-        parser.error("Unknown backend: {}-{}".format(str(opts.target), str(opts.arch)))
+        parser.error("Unknown backend: {}-{}".format(str(opts.target),
+                                                     str(opts.arch)))
 
     # set all configuration and command line options for backend
     backend.process_command_line_options(opts)

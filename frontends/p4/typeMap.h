@@ -40,9 +40,10 @@ Objects that have a type in the map:
 class TypeMap final : public ProgramMap {
  protected:
     // We want to have the same canonical type for two
-    // different tuples or stacks with the same signature.
+    // different tuples, lists, or stacks with the same signature.
     std::vector<const IR::Type*> canonicalTuples;
     std::vector<const IR::Type*> canonicalStacks;
+    std::vector<const IR::Type*> canonicalLists;
 
     // Map each node to its canonical type
     std::map<const IR::Node*, const IR::Type*> typeMap;
@@ -76,6 +77,8 @@ class TypeMap final : public ProgramMap {
     { return typeMap.size(); }
 
     void setLeftValue(const IR::Expression* expression);
+    void cloneExpressionProperties(const IR::Expression* to,
+                                   const IR::Expression* from);
     void setCompileTimeConstant(const IR::Expression* expression);
     void addSubstitutions(const TypeVariableSubstitution* tvs);
     const IR::Type* getSubstitution(const IR::Type_Var* var)

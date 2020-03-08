@@ -40,7 +40,7 @@ parseConstantWithWidth(Util::SourceInfo srcInfo, const char* text,
     if (sep == nullptr || !*sep)
        BUG("Expected to find separator %1%", text);
     if (size <= 0) {
-        ::error(ErrorType::ERR_INVALID, "width; must be positive %2%", srcInfo, size);
+        ::error(ErrorType::ERR_INVALID, "%1%: invalid width; %2% must be positive", srcInfo, size);
         return nullptr; }
     if (size > P4CConfiguration::MaximumWidthSupported) {
         ::error(ErrorType::ERR_OVERLIMIT, "%1%: %2% size too large", srcInfo, size);
@@ -48,7 +48,7 @@ parseConstantWithWidth(Util::SourceInfo srcInfo, const char* text,
 
     bool isSigned = *sep++ == 's';
     sep += strspn(sep, " \t\r\n");
-    mpz_class value = Util::cvtInt(sep+skip, base);
+    big_int value = Util::cvtInt(sep+skip, base);
     const IR::Type* type = IR::Type_Bits::get(srcInfo, size, isSigned);
     IR::Constant* result = new IR::Constant(srcInfo, type, value, base);
     return result;

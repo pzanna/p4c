@@ -39,7 +39,7 @@ header ipv4_t {
     bit<16>     hdrChecksum;
     bit<32>     srcAddr;
     bit<32>     dstAddr;
-    @length(((bit<32>)ihl << 2 << 3) + 32w4294967136) 
+    @length(((bit<32>)ihl << 5) + 32w4294967136) 
     varbit<352> options;
 }
 
@@ -64,7 +64,6 @@ struct headers {
 
 parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
     ipv4_t_1 tmp_hdr_0;
-    ipv4_t_1 tmp;
     @name(".parse_ethernet") state parse_ethernet {
         packet.extract<ethernet_t>(hdr.ethernet);
         transition select(hdr.ethernet.ethertype) {
@@ -74,9 +73,8 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
         }
     }
     @name(".parse_ipv4") state parse_ipv4 {
-        tmp = packet.lookahead<ipv4_t_1>();
-        tmp_hdr_0 = tmp;
-        packet.extract<ipv4_t>(hdr.ipv4, ((bit<32>)tmp_hdr_0.ihl << 2 << 3) + 32w4294967136);
+        tmp_hdr_0 = packet.lookahead<ipv4_t_1>();
+        packet.extract<ipv4_t>(hdr.ipv4, ((bit<32>)tmp_hdr_0.ihl << 5) + 32w4294967136);
         transition accept;
     }
     @name(".parse_vlan_tag") state parse_vlan_tag {

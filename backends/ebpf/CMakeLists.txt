@@ -50,11 +50,26 @@ set (P4C_EBPF_HDRS
   lower.h
   )
 
+# # determine the kernel version
+# execute_process(COMMAND uname -r
+#   OUTPUT_VARIABLE P4C_EBPF_KERNEL_VER
+#   OUTPUT_STRIP_TRAILING_WHITESPACE
+#   RESULT_VARIABLE rc)
+# message(STATUS "Detected kernel version: ${P4C_EBPF_KERNEL_VER}")
+# if (EXISTS /usr/src/linux-headers-${P4C_EBPF_KERNEL_VER}/include/uapi/linux)
+#   set (SUPPORTS_KERNEL True)
+# else()
+#   set (SUPPORTS_KERNEL False)
+# endif()
+# The kernel-based ebpf tests seem to be broken, so we disable them
+# The dependences on the kernel APIs are too brittle
+set (SUPPORTS_KERNEL False)
+
 add_cpplint_files(${CMAKE_CURRENT_SOURCE_DIR} "${P4C_EBPF_SRCS};${P4C_EBPF_HDRS}")
 
 set (P4C_EBPF_DIST_HEADERS p4include/ebpf_model.p4)
 
-build_unified(P4C_EBPF_SRCS ALL)
+build_unified(P4C_EBPF_SRCS)
 add_executable(p4c-ebpf ${P4C_EBPF_SRCS})
 target_link_libraries (p4c-ebpf ${P4C_LIBRARIES} ${P4C_LIB_DEPS})
 add_dependencies(p4c-ebpf genIR frontend)
@@ -68,11 +83,11 @@ install (DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/p4include
 # binary to be in the top level directory. This should go away when we
 # remove automake and fix the scripts.
 add_custom_target(linkp4cebpf
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_BINARY_DIR}/p4c-ebpf ${P4C_BINARY_DIR}/p4c-ebpf
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${P4C_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/p4c-ebpf` ${P4C_BINARY_DIR}/p4c-ebpf
   COMMAND ${CMAKE_COMMAND} -E make_directory ${P4C_BINARY_DIR}/p4include &&
           ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/${P4C_EBPF_DIST_HEADERS} ${P4C_BINARY_DIR}/p4include
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${P4C_BINARY_DIR}/p4include ${CMAKE_CURRENT_BINARY_DIR}/p4include
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${P4C_BINARY_DIR}/p4_14include ${CMAKE_CURRENT_BINARY_DIR}/p4_14include
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${CMAKE_CURRENT_BINARY_DIR} ${P4C_BINARY_DIR}/p4include` ${CMAKE_CURRENT_BINARY_DIR}/p4include
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${CMAKE_CURRENT_BINARY_DIR} ${P4C_BINARY_DIR}/p4_14include` ${CMAKE_CURRENT_BINARY_DIR}/p4_14include
   )
 
 add_dependencies(p4c_driver linkp4cebpf)
@@ -93,8 +108,6 @@ set (XFAIL_TESTS_TEST)
 set (EBPF_TEST_SUITES
   "${P4C_SOURCE_DIR}/testdata/p4_16_samples/*_ebpf.p4"
   )
-
-set (SUPPORTS_KERNEL True)
 
 # Check if the kernel version is new enough to support ebpf features
 set (MIN_KERNEL 4.15.0)

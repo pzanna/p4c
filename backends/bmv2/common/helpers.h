@@ -48,6 +48,7 @@ class MatchImplementation {
  public:
     static const cstring selectorMatchTypeName;
     static const cstring rangeMatchTypeName;
+    static const cstring optionalMatchTypeName;
 };
 
 class TableAttributes {
@@ -100,7 +101,7 @@ Util::JsonArray* mkArrayField(Util::JsonObject* parent, cstring name);
 Util::JsonArray* mkParameters(Util::JsonObject* object);
 Util::JsonObject* mkPrimitive(cstring name, Util::JsonArray* appendTo);
 Util::JsonObject* mkPrimitive(cstring name);
-cstring stringRepr(mpz_class value, unsigned bytes = 0);
+cstring stringRepr(big_int value, unsigned bytes = 0);
 unsigned nextId(cstring group);
 
 }  // namespace BMV2

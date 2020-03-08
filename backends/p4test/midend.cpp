@@ -36,6 +36,7 @@ limitations under the License.
 #include "midend/eliminateSerEnums.h"
 #include "midend/flattenHeaders.h"
 #include "midend/flattenInterfaceStructs.h"
+#include "midend/replaceSelectRange.h"
 #include "midend/expandEmit.h"
 #include "midend/expandLookahead.h"
 #include "midend/local_copyprop.h"
@@ -45,6 +46,7 @@ limitations under the License.
 #include "midend/parserUnroll.h"
 #include "midend/predication.h"
 #include "midend/removeExits.h"
+#include "midend/removeMiss.h"
 #include "midend/removeParameters.h"
 #include "midend/removeSelectBooleans.h"
 #include "midend/simplifyKey.h"
@@ -80,6 +82,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
     // TODO: handle bit-slices as out arguments
     addPasses({
         options.ndebug ? new P4::RemoveAssertAssume(&refMap, &typeMap) : nullptr,
+        new P4::RemoveMiss(&refMap, &typeMap),
         new P4::EliminateNewtype(&refMap, &typeMap),
         new P4::EliminateSerEnums(&refMap, &typeMap),
         new P4::RemoveActionParameters(&refMap, &typeMap),
@@ -103,6 +106,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::RemoveSelectBooleans(&refMap, &typeMap),
         new P4::FlattenHeaders(&refMap, &typeMap),
         new P4::FlattenInterfaceStructs(&refMap, &typeMap),
+        new P4::ReplaceSelectRange(&refMap, &typeMap),
         new P4::Predication(&refMap),
         new P4::MoveDeclarations(),  // more may have been introduced
         new P4::ConstantFolding(&refMap, &typeMap),

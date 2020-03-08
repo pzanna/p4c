@@ -19,7 +19,6 @@ limitations under the License.
 
 #include <assert.h>
 #include <boost/optional.hpp>
-#include <gmpxx.h>
 #include <string>
 #include <map>
 #include <unordered_map>
@@ -197,13 +196,17 @@ class JSONLoader {
     template<typename T>
     typename std::enable_if<std::is_integral<T>::value>::type
     unpack_json(T &v) { v = *json->to<JsonNumber>(); }
-    void unpack_json(mpz_class &v) { v = json->to<JsonNumber>()->val; }
+    void unpack_json(big_int &v) { v = json->to<JsonNumber>()->val; }
     void unpack_json(cstring &v) { if (!json->is<JsonNull>()) v = *json->to<std::string>(); }
     void unpack_json(IR::ID &v) { if (!json->is<JsonNull>()) v.name = *json->to<std::string>(); }
 
     void unpack_json(LTBitMatrix &m) {
         if (auto *s = json->to<std::string>())
             s->c_str() >> m; }
+
+    void unpack_json(bitvec &v) {
+        if (auto *s = json->to<std::string>())
+            s->c_str() >> v; }
 
     template<typename T> typename std::enable_if<std::is_enum<T>::value>::type
     unpack_json(T &v) {
@@ -225,8 +228,7 @@ class JSONLoader {
         load("base", base);
         load("hasWidth", hasWidth);
 
-        UnparsedConstant result {text, skip, base, hasWidth};
-        v = &result;
+        v = new UnparsedConstant({text, skip, base, hasWidth});
     }
 
     template<typename T>

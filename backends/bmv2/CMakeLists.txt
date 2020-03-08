@@ -88,13 +88,13 @@ build_unified(BMV2_BACKEND_COMMON_SRCS)
 add_library(bmv2backend ${BMV2_BACKEND_COMMON_SRCS})
 add_dependencies(bmv2backend genIR frontend)
 
-build_unified(BMV2_SIMPLE_SWiTCH_SRCS)
+build_unified(BMV2_SIMPLE_SWITCH_SRCS)
 add_executable(p4c-bm2-ss ${BMV2_SIMPLE_SWITCH_SRCS})
 target_link_libraries (p4c-bm2-ss bmv2backend ${P4C_LIBRARIES} ${P4C_LIB_DEPS})
 
 install(TARGETS p4c-bm2-ss RUNTIME DESTINATION ${P4C_RUNTIME_OUTPUT_DIRECTORY})
 
-build_unified(BMV2_PSA_SWiTCH_SRCS)
+build_unified(BMV2_PSA_SWITCH_SRCS)
 add_executable(p4c-bm2-psa ${BMV2_PSA_SWITCH_SRCS})
 target_link_libraries (p4c-bm2-psa bmv2backend ${P4C_LIBRARIES} ${P4C_LIB_DEPS})
 install(TARGETS p4c-bm2-psa RUNTIME DESTINATION ${P4C_RUNTIME_OUTPUT_DIRECTORY})
@@ -103,10 +103,10 @@ install(TARGETS p4c-bm2-psa RUNTIME DESTINATION ${P4C_RUNTIME_OUTPUT_DIRECTORY})
 # binary to be in the top level directory. This should go away when we
 # remove automake and fix the scripts.
 add_custom_target(linkbmv2
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_BINARY_DIR}/p4c-bm2-ss ${P4C_BINARY_DIR}/p4c-bm2-ss
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_BINARY_DIR}/p4c-bm2-psa ${P4C_BINARY_DIR}/p4c-bm2-psa
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${P4C_BINARY_DIR}/p4include ${CMAKE_CURRENT_BINARY_DIR}/p4include
-  COMMAND ${CMAKE_COMMAND} -E create_symlink ${P4C_BINARY_DIR}/p4_14include ${CMAKE_CURRENT_BINARY_DIR}/p4_14include
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${P4C_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/p4c-bm2-ss` ${P4C_BINARY_DIR}/p4c-bm2-ss
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${P4C_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/p4c-bm2-psa` ${P4C_BINARY_DIR}/p4c-bm2-psa
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${CMAKE_CURRENT_BINARY_DIR} ${P4C_BINARY_DIR}/p4include` ${CMAKE_CURRENT_BINARY_DIR}/p4include
+  COMMAND ${CMAKE_COMMAND} -E create_symlink `realpath --relative-to=${CMAKE_CURRENT_BINARY_DIR} ${P4C_BINARY_DIR}/p4_14include` ${CMAKE_CURRENT_BINARY_DIR}/p4_14include
   )
 add_dependencies(p4c_driver linkbmv2)
 
@@ -184,8 +184,6 @@ set (XFAIL_TESTS
   # Next two use unknown externs
   testdata/p4_16_samples/issue1882-bmv2.p4
   testdata/p4_16_samples/issue1882-1-bmv2.p4
-  # Uses non-constant array index
-  testdata/p4_16_samples/issue1989-bmv2.p4
 )
 
 if (HAVE_SIMPLE_SWITCH)

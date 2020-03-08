@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "p4/config/v1/p4types.pb.h"
 
+#include "bytestrings.h"
 #include "flattenHeader.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
 #include "frontends/p4/typeMap.h"
@@ -57,7 +58,8 @@ bool TypeSpecConverter::preorder(const IR::Type_Bits* type) {
     auto bitTypeSpec = typeSpec->mutable_bitstring();
     auto bw = type->width_bits();
     if (type->isSigned) bitTypeSpec->mutable_int_()->set_bitwidth(bw);
-    else bitTypeSpec->mutable_bit()->set_bitwidth(bw);
+    else
+        bitTypeSpec->mutable_bit()->set_bitwidth(bw);
     map.emplace(type, typeSpec);
     return false;
 }
@@ -121,7 +123,7 @@ bool TypeSpecConverter::preorder(const IR::Type_Name* type) {
 bool TypeSpecConverter::preorder(const IR::Type_Newtype* type) {
     if (p4RtTypeInfo) {
         bool orig_type = true;
-        const IR::StringLiteral* uri;
+        const IR::StringLiteral* uri = nullptr;
         const IR::Constant* sdnB;
         auto ann = type->getAnnotation("p4runtime_translation");
         if (ann != nullptr) {
@@ -139,8 +141,7 @@ bool TypeSpecConverter::preorder(const IR::Type_Newtype* type) {
                 return false;
             }
             auto value = sdnB->value;
-            auto bitsRequired = static_cast<size_t>(
-                                mpz_sizeinbase(value.get_mpz_t(), 2));
+            auto bitsRequired = floor_log2(value) + 1;
             BUG_CHECK(bitsRequired <= 31,
                       "Cannot represent %1% on 31 bits, require %2%",
                       value, bitsRequired);
@@ -161,7 +162,7 @@ bool TypeSpecConverter::preorder(const IR::Type_Newtype* type) {
             } else {
                 auto dataType = newTypeSpec->mutable_translated_type();
                 dataType->set_uri(std::string(uri->value));
-                dataType->set_sdn_bitwidth((uint32_t) sdnB->value.get_ui());
+                dataType->set_sdn_bitwidth((uint32_t) sdnB->value);
             }
             (*types)[name] = *newTypeSpec;
        }
@@ -170,7 +171,7 @@ bool TypeSpecConverter::preorder(const IR::Type_Newtype* type) {
     return false;
 }
 
-bool TypeSpecConverter::preorder(const IR::Type_Tuple* type) {
+bool TypeSpecConverter::preorder(const IR::Type_BaseList* type) {
     auto typeSpec = new P4DataTypeSpec();
     auto tupleTypeSpec = typeSpec->mutable_tuple();
     for (auto cType : type->components) {
@@ -194,7 +195,7 @@ bool TypeSpecConverter::preorder(const IR::Type_Stack* type) {
     auto name = decl->controlPlaneName();
 
     auto sizeConstant = type->size->to<IR::Constant>();
-    auto size = sizeConstant->value.get_ui();
+    unsigned size = static_cast<unsigned>(sizeConstant->value);
 
     if (decl->is<IR::Type_Header>()) {
         auto headerStackTypeSpec = typeSpec->mutable_header_stack();
@@ -308,11 +309,18 @@ bool TypeSpecConverter::preorder(const IR::Type_SerEnum* type) {
         if (enums->find(name) == enums->end()) {
             auto enumTypeSpec = new p4configv1::P4SerializableEnumTypeSpec();
             auto bitTypeSpec = enumTypeSpec->mutable_underlying_type();
-            bitTypeSpec->set_bitwidth(type->type->width_bits());
+            auto width = type->type->width_bits();
+            bitTypeSpec->set_bitwidth(width);
             for (auto m : type->members) {
                 auto member = enumTypeSpec->add_members();
                 member->set_name(m->controlPlaneName());
-                member->set_value(std::string(m->value->toString()));
+                if (!m->value->is<IR::Constant>()) {
+                    ::error("%1% unsupported SerEnum member value", m->value);
+                    continue;
+                }
+                auto value = stringRepr(m->value->to<IR::Constant>(), width);
+                if (!value) continue;  // error already logged by stringRepr
+                member->set_value(*value);
             }
             (*enums)[name] = *enumTypeSpec;
         }

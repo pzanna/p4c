@@ -132,6 +132,16 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
                        return true; },
                    "Choose output format for the P4Runtime API description (default is binary).\n"
                    "[Deprecated; use '--p4runtime-files' instead].");
+    registerOption("--disable-annotations", "annotations",
+                   [this](const char *arg) {
+                      auto copy = strdup(arg);
+                      while (auto name = strsep(&copy, ","))
+                          disabledAnnotations.insert(name);
+                      return true;
+                   },
+                   "Specify a (comma separated) list of annotations that should be ignored by\n"
+                   "the compiler. A warning will be printed that the annotation is ignored",
+                   OptionFlags::OptionalArgument);
     registerOption("--Wdisable", "diagnostic",
         [](const char *diagnostic) {
             if (diagnostic) {
@@ -266,7 +276,8 @@ static void convertToAbsPath(const char* const relPath, char (&output)[N]) {
 
     // Construct an absolute path. We're assuming that @relPath is relative to
     // the current working directory.
-    snprintf(output, N, "%s%s%s", cwd, separator, relPath);
+    int n = snprintf(output, N, "%s%s%s", cwd, separator, relPath);
+    BUG_CHECK(n >= 0, "Pathname too long");
 }
 
 bool setIncludePathIfExists(const char*& includePathOut,
@@ -274,9 +285,6 @@ bool setIncludePathIfExists(const char*& includePathOut,
     struct stat st;
     char buffer[PATH_MAX];
     int len;
-    if ((len = readlink(possiblePath, buffer, sizeof(buffer))) > 0) {
-        buffer[len] = 0;
-        possiblePath = buffer; }
     if (!(stat(possiblePath, &st) >= 0 && S_ISDIR(st.st_mode))) return false;
     includePathOut = strdup(possiblePath);
     return true;
@@ -311,13 +319,11 @@ std::vector<const char*>* CompilerOptions::process(int argc, char* const argv[])
         snprintf(p, buffer + sizeof(buffer) - p, "p4include");
         if (!setIncludePathIfExists(p4includePath, buffer)) {
             snprintf(p, buffer + sizeof(buffer) - p, "../p4include");
-            setIncludePathIfExists(p4includePath, buffer);
-        }
+            setIncludePathIfExists(p4includePath, buffer); }
         snprintf(p, buffer + sizeof(buffer) - p, "p4_14include");
         if (!setIncludePathIfExists(p4_14includePath, buffer)) {
             snprintf(p, buffer + sizeof(buffer) - p, "../p4_14include");
-            setIncludePathIfExists(p4_14includePath, buffer);
-        }
+            setIncludePathIfExists(p4_14includePath, buffer); }
     }
 
     auto remainingOptions = Util::Options::process(argc, argv);
@@ -436,6 +442,15 @@ void CompilerOptions::dumpPass(const char* manager, unsigned seq, const char* pa
             break;
         }
     }
+}
+
+bool CompilerOptions::isAnnotationDisabled(const IR::Annotation *a) const {
+    if (disabledAnnotations.count(a->name.name) > 0) {
+        ::warning(ErrorType::WARN_IGNORE,
+                  "%1% is ignored because it was explicitly disabled", a);
+        return true;
+    }
+    return false;
 }
 
 DebugHook CompilerOptions::getDebugHook() const {

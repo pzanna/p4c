@@ -169,7 +169,10 @@ class Type_InfInt : Type, ITypeVar {
     dbprint { out << "int/" << declid; }
     toString { return "int"; }
     operator== { return declid == a.declid; }
-    equiv { return true; /* ignore declid */ }
+    equiv {
+        (void)a;  // silence unused warning
+        return true; /* ignore declid */
+    }
     const Type* getP4Type() const override { return this; }
 }
 
@@ -233,6 +236,15 @@ abstract Type_StructLike : Type_Declaration, ISimpleNamespace, IAnnotated {
         return fields.getDeclarations(); }
     StructField getField(cstring name) const {
         return fields.getDeclaration<StructField>(name); }
+    int getFieldIndex(cstring name) const {
+        int index_pos = 0;
+        for (auto f : fields) {
+            if (f->name == name)
+                return index_pos;
+	    index_pos++;
+        }
+        return -1;
+    }
     int width_bits() const override {
         int rv = 0;
         for (auto f : fields) {
@@ -288,20 +300,31 @@ class Type_Set : Type {
         return elementType->width_bits(); }
 }
 
-/// The type of an expressionList
-class Type_Tuple : Type {
+/// Base class for Type_List and Type_Tuple
+abstract Type_BaseList : Type {
     optional inline Vector<Type> components;
-    toString{ return "Tuple(" + Util::toString(components.size()) + ")"; }
     validate{ components.check_null(); }
-    const Type* getP4Type() const override;
     size_t size() const { return components.size(); }
     int width_bits() const override {
-        /// returning sum of the width of the tuple elements
+        /// returning sum of the width of the elements
         int rv = 0;
         for (auto f : components) {
             rv += f->width_bits();
         }
         return rv; }
+}
+
+/// The type of an expressionList; can be unified with both Type_Tuple and Type_Struct
+class Type_List : Type_BaseList {
+    // In error messages this is shown as if it is a Tuple
+    toString{ return "Tuple(" + Util::toString(components.size()) + ")"; }
+    const Type* getP4Type() const override;
+}
+
+/// The type of a tuple.
+class Type_Tuple : Type_BaseList {
+    toString{ return "Tuple(" + Util::toString(components.size()) + ")"; }
+    const Type* getP4Type() const override;
 }
 
 /// The type of an architectural block.
@@ -446,6 +469,7 @@ class Type_Table : Type, IApply {
     /// names for the fields of the struct returned
     /// by applying a table
     static const ID hit;
+    static const ID miss;
     static const ID action_run;
     const IR::Type* getP4Type() const override { return nullptr; }
     dbprint { out << table->name; }

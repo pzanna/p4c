@@ -55,6 +55,7 @@ limitations under the License.
 #include "specialize.h"
 #include "strengthReduction.h"
 #include "structInitializers.h"
+#include "switchAddDefault.h"
 #include "tableKeyNames.h"
 #include "toP4/toP4.h"
 #include "typeChecking/typeChecker.h"
@@ -150,11 +151,13 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new BindTypeVariables(&refMap, &typeMap),
         new StructInitializers(&refMap, &typeMap),
         new TableKeyNames(&refMap, &typeMap),
-        // Another round of constant folding, using type information.
-        new ConstantFolding(&refMap, &typeMap),
-        new StrengthReduction(&refMap, &typeMap),
-        new UselessCasts(&refMap, &typeMap),
+        new PassRepeated({
+            new ConstantFolding(&refMap, &typeMap),
+            new StrengthReduction(&refMap, &typeMap),
+            new UselessCasts(&refMap, &typeMap)
+        }),
         new SimplifyControlFlow(&refMap, &typeMap),
+        new SwitchAddDefault,
         new FrontEndDump(),  // used for testing the program at this point
         new RemoveAllUnusedDeclarations(&refMap, true),
         new SimplifyParsers(&refMap),
@@ -209,8 +212,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
 
     passes.setName("FrontEnd");
     passes.setStopOnError(true);
-    passes.addDebugHooks(hooks);
-
+    passes.addDebugHooks(hooks, true);
     const IR::P4Program* result = program->apply(passes);
     return result;
 }

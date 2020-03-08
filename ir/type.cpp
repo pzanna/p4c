@@ -32,6 +32,7 @@ const cstring IR::Type_StructLike::minSizeInBits = "minSizeInBits";
 const cstring IR::Type_StructLike::minSizeInBytes = "minSizeInBytes";
 
 const IR::ID IR::Type_Table::hit = ID("hit");
+const IR::ID IR::Type_Table::miss = ID("miss");
 const IR::ID IR::Type_Table::action_run = ID("action_run");
 
 const cstring IR::Annotation::nameAnnotation = "name";
@@ -44,6 +45,7 @@ const cstring IR::Annotation::optionalAnnotation = "optional";
 const cstring IR::Annotation::pkginfoAnnotation = "pkginfo";
 const cstring IR::Annotation::deprecatedAnnotation = "deprecated";
 const cstring IR::Annotation::synchronousAnnotation = "synchronous";
+const cstring IR::Annotation::noSideEffectsAnnotation = "noSideEffects";
 const cstring IR::Annotation::matchAnnotation = "match";
 
 int Type_Declaration::nextId = 0;
@@ -86,13 +88,13 @@ const Type_String *Type_String::get() {
 
 const Type::Bits *Type::Bits::get(Util::SourceInfo si, int sz, bool isSigned) {
     if (sz <= 0)
-        ::error(ErrorType::ERR_INVALID, "Width cannot be negative or zero", si);
+        ::error(ErrorType::ERR_INVALID, "%1%: Width cannot be negative or zero", si);
     return get(sz, isSigned);
 }
 
 const Type::Varbits *Type::Varbits::get(Util::SourceInfo si, int sz) {
     if (sz <= 0)
-        ::error(ErrorType::ERR_INVALID, "Width cannot be negative or zero", si);
+        ::error(ErrorType::ERR_INVALID, "%1%: Width cannot be negative or zero", si);
     return new Type::Varbits(si, sz);
 }
 
@@ -142,6 +144,16 @@ size_t Type_MethodBase::minParameterCount() const {
         if (!p->isOptional())
             ++rv;
     return rv;
+}
+
+const Type* Type_List::getP4Type() const {
+    auto args = new IR::Vector<Type>();
+    for (auto a : components) {
+        auto at = a->getP4Type();
+        if (!at) return nullptr;
+        args->push_back(at);
+    }
+    return new IR::Type_List(srcInfo, *args);
 }
 
 const Type* Type_Tuple::getP4Type() const {

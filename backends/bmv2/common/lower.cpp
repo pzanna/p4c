@@ -31,7 +31,7 @@ const IR::Expression* LowerExpressions::shift(const IR::Operation_Binary* expres
     auto rhstype = typeMap->getType(rhs, true);
     if (rhstype->is<IR::Type_InfInt>()) {
         auto cst = rhs->to<IR::Constant>();
-        mpz_class maxShift = Util::shift_left(1, LowerExpressions::maxShiftWidth);
+        big_int maxShift = Util::shift_left(1, LowerExpressions::maxShiftWidth);
         if (cst->value > maxShift)
             ::error(ErrorType::ERR_OVERLIMIT, "%1%: shift amount limited to %2% on this target",
                     expression, maxShift);
@@ -83,8 +83,8 @@ const IR::Node* LowerExpressions::postorder(IR::Cast* expression) {
 
 const IR::Node* LowerExpressions::postorder(IR::Expression* expression) {
     // Just update the typeMap incrementally.
-    auto type = typeMap->getType(getOriginal(), true);
-    typeMap->setType(expression, type);
+    auto orig = getOriginal<IR::Expression>();
+    typeMap->cloneExpressionProperties(expression, orig);
     return expression;
 }
 
@@ -130,7 +130,7 @@ const IR::Node* LowerExpressions::postorder(IR::Concat* expression) {
     auto cast1 = new IR::Cast(expression->right->srcInfo, resulttype, expression->right);
 
     auto sh = new IR::Shl(cast0->srcInfo, cast0, new IR::Constant(sizeofb));
-    mpz_class m = Util::maskFromSlice(sizeofb, 0);
+    big_int m = Util::maskFromSlice(sizeofb, 0);
     auto mask = new IR::Constant(expression->right->srcInfo,
                                  IR::Type_Bits::get(sizeofresult), m, 16);
     auto and0 = new IR::BAnd(expression->right->srcInfo, cast1, mask);
@@ -301,7 +301,7 @@ RemoveComplexExpressions::postorder(IR::MethodCallExpression* expression) {
             // one knew of this feature, since it was not very clearly
             // documented.
             if (expression->arguments->size() != 2) {
-                ::error(ErrorType::ERR_EXPECTED, "2 arguments", expression);
+                ::error(ErrorType::ERR_EXPECTED, "%1%: expected 2 arguments", expression);
                 return expression;
             }
             auto vec = new IR::Vector<IR::Argument>();

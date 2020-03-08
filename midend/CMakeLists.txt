@@ -17,11 +17,12 @@ set (MIDEND_SRCS
   complexComparison.cpp
   convertEnums.cpp
   copyStructures.cpp
-  eliminateTuples.cpp
   eliminateNewtype.cpp
   eliminateSerEnums.cpp
+  eliminateTuples.cpp
   expandEmit.cpp
   expandLookahead.cpp
+  fillEnumMap.cpp
   flattenHeaders.cpp
   flattenInterfaceStructs.cpp
   interpreter.cpp
@@ -31,10 +32,13 @@ set (MIDEND_SRCS
   orderArguments.cpp
   parserUnroll.cpp
   predication.cpp
+  removeAssertAssume.cpp
   removeExits.cpp
   removeLeftSlices.cpp
+  removeMiss.cpp
   removeParameters.cpp
   removeSelectBooleans.cpp
+  replaceSelectRange.cpp
   removeUnusedParameters.cpp
   simplifyBitwise.cpp
   simplifyKey.cpp
@@ -43,8 +47,6 @@ set (MIDEND_SRCS
   singleArgumentSelect.cpp
   tableHit.cpp
   validateProperties.cpp
-  fillEnumMap.cpp
-  removeAssertAssume.cpp
   )
 
 set (MIDEND_HDRS
@@ -54,14 +56,15 @@ set (MIDEND_HDRS
   complexComparison.h
   convertEnums.h
   copyStructures.h
-  eliminateTuples.h
   eliminateNewtype.h
   eliminateSerEnums.h
+  eliminateTuples.h
   expandEmit.h
   expandLookahead.h
   expr_uses.h
-  flattenInterfaceStructs.h
+  fillEnumMap.h
   flattenHeaders.h
+  flattenInterfaceStructs.h
   has_side_effects.h
   interpreter.h
   local_copyprop.h
@@ -71,11 +74,14 @@ set (MIDEND_HDRS
   orderArguments.h
   parserUnroll.h
   predication.h
+  removeAssertAssume.h
   removeExits.h
   removeLeftSlices.h
+  removeMiss.h
   removeParameters.h
   removeSelectBooleans.h
   removeUnusedParameters.h
+  replaceSelectRange.h
   simplifyBitwise.h
   simplifyKey.h
   simplifySelectCases.h
@@ -83,8 +89,6 @@ set (MIDEND_HDRS
   singleArgumentSelect.h
   tableHit.h
   validateProperties.h
-  fillEnumMap.h
-  removeAssertAssume.h
   )
 
 add_cpplint_files (${CMAKE_CURRENT_SOURCE_DIR} "${MIDEND_SRCS};${MIDEND_HDRS}")

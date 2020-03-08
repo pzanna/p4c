@@ -1,4 +1,4 @@
-issue1932-1.p4(10): [--Werror=legacy] error: foo: Duplicates declaration foo
+issue1932-1.p4(10): [--Werror=duplicate] error: foo: Duplicates declaration foo
     action foo (inout bit<8> x) { x = (x >> 3); }
            ^^^
 issue1932-1.p4(9)

@@ -130,7 +130,8 @@ void ProgramStructure::createTypes() {
     // Metadata first
     for (auto it : metadata) {
         auto type = it.first->type;
-        if (systemHeaderTypes.count(type->name.name) != 0)
+        if (metadataTypes.count(type->externalName()) ||
+            parameterTypes.count(type->externalName()))
             continue;
         createType(type, false, &converted);
     }
@@ -166,7 +167,8 @@ void ProgramStructure::createTypes() {
     for (auto it : headers) {
         auto type = it.first->type;
         CHECK_NULL(type);
-        if (systemHeaderTypes.count(type->externalName()) != 0)
+        if (headerTypes.count(type->externalName()) ||
+            parameterTypes.count(type->externalName()))
             continue;
         createType(type, true, &converted);
     }
@@ -218,17 +220,17 @@ const IR::Type_Struct* ProgramStructure::createFieldListType(const IR::Expressio
 void ProgramStructure::createStructures() {
     auto metadata = new IR::Type_Struct(v1model.metadataType.Id());
     for (auto it : this->metadata) {
-        if (systemHeaderTypes.count(it.first->type->name))
-            continue;
         IR::ID id = it.first->name;
         auto type = it.first->type;
+        auto type_name = types.get(type);
+        if (metadataInstances.count(type_name))
+            continue;
         auto h = headers.get(it.first->name);
         if (h != nullptr)
             ::warning(ErrorType::ERR_DUPLICATE,
-                      "header and metadata instances %2% with the same name",
+                      "%1%: header and metadata instances %2% with the same name",
                       it.first, h);
-        auto type_name = types.get(type);
-        auto ht = type->to<IR::Type_Struct>();
+        auto ht = type->to<IR::Type_StructLike>();
         auto path = new IR::Path(type_name);
         auto tn = new IR::Type_Name(ht->name.srcInfo, path);
         auto annos = addGlobalNameAnnotation(id, it.first->annotations);
@@ -242,10 +244,9 @@ void ProgramStructure::createStructures() {
         IR::ID id = it.first->name;
         auto type = it.first->type;
         auto type_name = types.get(type);
-        // filter out headers defined in architecture
-        if (systemHeaderTypes.count(type_name))
+        if (headerInstances.count(type_name))
             continue;
-        auto ht = type->to<IR::Type_Header>();
+        auto ht = type->to<IR::Type_StructLike>();
         auto path = new IR::Path(type_name);
         auto tn = new IR::Type_Name(ht->name.srcInfo, path);
         auto annos = addGlobalNameAnnotation(id, it.first->annotations);
@@ -314,7 +315,7 @@ const IR::Statement* ProgramStructure::convertParserStatement(const IR::Expressi
             auto destType = dest->type;
             CHECK_NULL(destType);
             if (!destType->is<IR::Type_Header>()) {
-                ::error(ErrorType::ERR_INVALID, "argument. Expected a header not %2%",
+                ::error(ErrorType::ERR_INVALID, "%1%: invalid argument. Expected a header not %2%",
                         primitive, destType->toString());
                 return nullptr;
             }
@@ -373,15 +374,15 @@ const IR::PathExpression* ProgramStructure::getState(IR::ID dest) {
     }
 }
 
-static const IR::Expression*
-explodeLabel(const IR::Constant* value, const IR::Constant* mask,
-             const std::vector<const IR::Type::Bits *> &fieldTypes) {
+const IR::Expression*
+ProgramStructure::explodeLabel(const IR::Constant* value, const IR::Constant* mask,
+                               const std::vector<const IR::Type::Bits *> &fieldTypes) {
     if (mask->value == 0)
         return new IR::DefaultExpression(value->srcInfo);
     bool useMask = mask->value != -1;
 
-    mpz_class v = value->value;
-    mpz_class m = mask->value;
+    big_int v = value->value;
+    big_int m = mask->value;
 
     auto rv = new IR::ListExpression(value->srcInfo, {});
     for (auto it = fieldTypes.rbegin(); it != fieldTypes.rend(); ++it) {
@@ -400,8 +401,8 @@ explodeLabel(const IR::Constant* value, const IR::Constant* mask,
     return rv;
 }
 
-static const IR::Type*
-explodeType(const std::vector<const IR::Type::Bits *> &fieldTypes) {
+const IR::Type*
+ProgramStructure::explodeType(const std::vector<const IR::Type::Bits *> &fieldTypes) {
     auto rv = new IR::Vector<IR::Type>();
     for (auto it = fieldTypes.begin(); it != fieldTypes.end(); ++it) {
         rv->push_back(*it);
@@ -483,7 +484,6 @@ const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parse
                 }
                 auto annos = addGlobalNameAnnotation(value_set->name, value_set->annotations);
                 auto decl = new IR::P4ValueSet(value_set->name, annos, type, sizeConstant);
-                LOG1(decl);
                 stateful->push_back(decl);
             }
             for (auto v : c->values) {
@@ -492,6 +492,13 @@ const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parse
                     auto sc = new IR::SelectCase(c->srcInfo, expr, deststate);
                     cases.push_back(sc);
                 } else {
+                    auto c = v.second->to<IR::Constant>();
+                    CHECK_NULL(c);  // this is enforced elsewhere
+                    if (!c->fitsInt() || c->asInt() != -1) {
+                        ::error(ErrorType::ERR_INVALID,
+                                "%1%: masks not supported for value sets", c);
+                        continue;
+                    }
                     auto sc = new IR::SelectCase(c->srcInfo, v.first, deststate);
                     cases.push_back(sc);
                 }
@@ -592,7 +599,11 @@ void ProgramStructure::loadModel() {
     // This includes in turn core.p4
     include("v1model.p4");
 
-    systemHeaderTypes.insert(v1model.standardMetadataType.name);
+    metadataInstances.insert(v1model.standardMetadataType.name);
+    metadataTypes.insert(v1model.standardMetadataType.name);
+    headerInstances.insert(v1model.standardMetadataType.name);
+    headerTypes.insert(v1model.standardMetadataType.name);
+    parameterTypes.insert(v1model.standardMetadataType.name);
 }
 
 namespace {
@@ -654,16 +665,14 @@ class HeaderRepresentation {
 };
 }  // namespace
 
-void ProgramStructure::createDeparserInternal(IR::ID hdrType,
-        IR::ID hdrParam, IR::ID pktParam, IR::ID deparserId,
+void ProgramStructure::createDeparserInternal(
+        IR::ID deparserId,
+        IR::Parameter* packetOut,
+        IR::Parameter* headers,
         std::vector<IR::Parameter*> extraParams = {},
-        IR::Direction hdrDirection = IR::Direction::In,
         IR::IndexedVector<IR::Declaration> controlLocals = {},
         std::function<IR::BlockStatement*(IR::BlockStatement*)> fn =
         [](IR::BlockStatement* b){ return b; }) {
-    auto headpath = new IR::Path(hdrType);
-    auto headtype = new IR::Type_Name(headpath);
-    auto headers = new IR::Parameter(hdrParam, hdrDirection, headtype);
     auto hdrsParam = paramReference(headers);
     HeaderRepresentation hr(hdrsParam);
 
@@ -721,12 +730,8 @@ void ProgramStructure::createDeparserInternal(IR::ID hdrType,
                   startHeader);
 
     auto params = new IR::ParameterList;
-    auto poutpath = new IR::Path(p4lib.packetOut.Id());
-    auto pouttype = new IR::Type_Name(poutpath);
-    auto packetOut = new IR::Parameter(pktParam, IR::Direction::None, pouttype);
     params->push_back(packetOut);
     params->push_back(headers);
-    conversionContext->header = paramReference(headers);
 
     for (auto p : extraParams)
         params->push_back(p);
@@ -764,10 +769,18 @@ void ProgramStructure::createDeparserInternal(IR::ID hdrType,
 }
 
 void ProgramStructure::createDeparser() {
-    createDeparserInternal(v1model.headersType.Id(),
-                           v1model.deparser.headersParam.Id(),
-                           v1model.deparser.packetParam.Id(),
-                           v1model.deparser.Id());
+    auto poutpath = new IR::Path(p4lib.packetOut.Id());
+    auto pouttype = new IR::Type_Name(poutpath);
+    auto packetOut = new IR::Parameter(
+            v1model.deparser.packetParam.Id(), IR::Direction::None, pouttype);
+
+    auto headpath = new IR::Path(v1model.headersType.Id());
+    auto headtype = new IR::Type_Name(headpath);
+    auto headers = new IR::Parameter(
+            v1model.deparser.headersParam.Id(), IR::Direction::In, headtype);
+    conversionContext->header = paramReference(headers);
+
+    createDeparserInternal(v1model.deparser.Id(), packetOut, headers);
 }
 
 const IR::Declaration_Instance*
@@ -2453,21 +2466,29 @@ void ProgramStructure::createChecksumUpdates() {
             args->push_back(new IR::Argument(dest));
             args->push_back(new IR::Argument(algo));
             auto methodCallExpression = new IR::MethodCallExpression(method, args);
-            IR::Annotation* zeros_as_ones_annot  = nullptr;
+            auto mc = new IR::MethodCallStatement(methodCallExpression);
             if (flc->algorithm->names[0] == "csum16_udp") {
-                zeros_as_ones_annot = new IR::Annotation(IR::ID("zeros_as_ones"),
-                              {methodCallExpression});
+                auto zeros_as_ones_annot = new IR::Annotation(IR::ID("zeros_as_ones"),
+                                            {methodCallExpression});
                 body->annotations = body->annotations->add(zeros_as_ones_annot);
             }
-            auto mc = new IR::MethodCallStatement(methodCallExpression);
+
+            for (auto annot : cf->annotations->annotations) {
+                auto newAnnot = new IR::Annotation(annot->name, {});
+                for (auto expr : annot->expr)
+                    newAnnot->expr.push_back(expr);
+                newAnnot->expr.push_back(methodCallExpression);
+                body->annotations = body->annotations->add(newAnnot);
+            }
+            for (auto annot : flc->annotations->annotations) {
+                auto newAnnot = new IR::Annotation(annot->name, {});
+                for (auto expr : annot->expr)
+                    newAnnot->expr.push_back(expr);
+                newAnnot->expr.push_back(methodCallExpression);
+                body->annotations = body->annotations->add(newAnnot);
+            }
+
             body->push_back(mc);
-
-            for (auto annot : cf->annotations->annotations)
-                body->annotations = body->annotations->add(annot);
-
-            for (auto annot : flc->annotations->annotations)
-                body->annotations = body->annotations->add(annot);
-
             LOG3("Converted " << flc);
         }
     }

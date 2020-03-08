@@ -37,9 +37,11 @@ limitations under the License.
 #include "midend/eliminateSerEnums.h"
 #include "midend/flattenHeaders.h"
 #include "midend/flattenInterfaceStructs.h"
+#include "midend/replaceSelectRange.h"
 #include "midend/local_copyprop.h"
 #include "midend/nestedStructs.h"
 #include "midend/removeLeftSlices.h"
+#include "midend/removeMiss.h"
 #include "midend/removeParameters.h"
 #include "midend/removeUnusedParameters.h"
 #include "midend/simplifyKey.h"
@@ -69,6 +71,7 @@ SimpleSwitchMidEnd::SimpleSwitchMidEnd(CompilerOptions& options, std::ostream* o
         std::initializer_list<Visitor *> midendPasses = {
             options.ndebug ? new P4::RemoveAssertAssume(&refMap, &typeMap) : nullptr,
             new P4::CheckTableSize(),
+            new P4::RemoveMiss(&refMap, &typeMap),
             new P4::EliminateNewtype(&refMap, &typeMap),
             new P4::EliminateSerEnums(&refMap, &typeMap),
             new P4::RemoveActionParameters(&refMap, &typeMap),
@@ -95,6 +98,7 @@ SimpleSwitchMidEnd::SimpleSwitchMidEnd(CompilerOptions& options, std::ostream* o
             new P4::RemoveSelectBooleans(&refMap, &typeMap),
             new P4::FlattenHeaders(&refMap, &typeMap),
             new P4::FlattenInterfaceStructs(&refMap, &typeMap),
+            new P4::ReplaceSelectRange(&refMap, &typeMap),
             new P4::Predication(&refMap),
             new P4::MoveDeclarations(),  // more may have been introduced
             new P4::ConstantFolding(&refMap, &typeMap),

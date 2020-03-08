@@ -43,7 +43,7 @@ class HasInfInt : public Inspector {
 /// Return nullptr if the type is not suitable to assign to a type variable.
 static const IR::Type* validateType(
     const IR::Type* type, const TypeMap* typeMap, const IR::Node* errorPosition) {
-    auto repl = type->getP4Type();
+    auto repl = type ? type->getP4Type() : nullptr;
     if (type == nullptr || repl == nullptr || HasInfInt::find(type)) {
         auto eoi = new ErrorOnInfInt(typeMap);
         errorPosition->apply(*eoi);
@@ -93,9 +93,13 @@ const IR::Node* DoBindTypeVariables::postorder(IR::Declaration_Instance* decl) {
 }
 
 const IR::Node* DoBindTypeVariables::postorder(IR::MethodCallExpression* expression) {
+    auto type = typeMap->getType(getOriginal(), true);
+    typeMap->setType(expression, type);
+    if (typeMap->isCompileTimeConstant(getOriginal<IR::Expression>()))
+        typeMap->setCompileTimeConstant(expression);
     if (!expression->typeArguments->empty())
         return expression;
-    auto type = typeMap->getType(expression->method, true);
+    type = typeMap->getType(expression->method, true);
     BUG_CHECK(type->is<IR::IMayBeGenericType>(), "%1%: unexpected type %2% for method",
               expression->method, type);
     auto mt = type->to<IR::IMayBeGenericType>();

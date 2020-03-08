@@ -21,6 +21,7 @@ limitations under the License.
 
 namespace P4 {
 
+
 /// Unifies a call with a prototype.
 bool TypeUnification::unifyCall(const IR::Node* errorPosition,
                                 const IR::Type_MethodBase* dest,
@@ -45,15 +46,17 @@ bool TypeUnification::unifyCall(const IR::Node* errorPosition,
         if (dest->typeParameters->size() != src->typeArguments->size()) {
             TypeInference::typeError(
                 "%1% has %2% type parameters, but is invoked with %3% type arguments",
-                errorPosition, (dest->typeParameters ? dest->typeParameters->size() : 0),
-                src->typeArguments->size());
+                errorPosition, dest->typeParameters->size(), src->typeArguments->size());
             return false;
         }
 
         size_t i = 0;
         for (auto tv : dest->typeParameters->parameters) {
             auto type = src->typeArguments->at(i++);
-            constraints->addEqualityConstraint(tv, type);
+            // variable type represents type of formal method argument
+            // written beetween angle brackets, and tv should be replaced
+            // with type of an actual argument
+            constraints->addEqualityConstraint(type /*dst */, tv /* src */);
         }
     }
 
@@ -292,21 +295,16 @@ bool TypeUnification::unify(const IR::Node* errorPosition,
             TypeInference::typeError("%1%: Cannot unify non-function type %2% to function type %3%",
                                      errorPosition, src->toString(), dest->toString());
         return false;
-    } else if (dest->is<IR::Type_Tuple>()) {
-        if (src->is<IR::Type_Struct>() || src->is<IR::Type_Header>()) {
-            // swap and try again: handled below
-            return unify(errorPosition, src, dest, reportErrors);
-        }
-        if (!src->is<IR::Type_Tuple>()) {
+    } else if (auto td = dest->to<IR::Type_BaseList>()) {
+        if (!src->is<IR::Type_BaseList>()) {
             if (reportErrors)
-                TypeInference::typeError("%1%: Cannot unify tuple type %2% with non tuple-type %3%",
+                TypeInference::typeError("%1%: Cannot unify type %2% with %3%",
                                          errorPosition, dest->toString(), src->toString());
             return false;
         }
-        auto td = dest->to<IR::Type_Tuple>();
-        auto ts = src->to<IR::Type_Tuple>();
+        auto ts = src->to<IR::Type_BaseList>();
         if (td->components.size() != ts->components.size()) {
-            TypeInference::typeError("%1%: Cannot match tuples with different sizes %2% vs %3%",
+            TypeInference::typeError("%1%: tuples with different sizes %2% vs %3%",
                                      errorPosition, td->components.size(), ts->components.size());
             return false;
         }
@@ -321,7 +319,7 @@ bool TypeUnification::unify(const IR::Node* errorPosition,
         return true;
     } else if (dest->is<IR::Type_Struct>() || dest->is<IR::Type_Header>()) {
         auto strct = dest->to<IR::Type_StructLike>();
-        if (auto tpl = src->to<IR::Type_Tuple>()) {
+        if (auto tpl = src->to<IR::Type_List>()) {
             if (strct->fields.size() != tpl->components.size()) {
                 if (reportErrors)
                     TypeInference::typeError("%1%: Number of fields %2% in initializer different "

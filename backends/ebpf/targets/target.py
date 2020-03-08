@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # Copyright 2013-present Barefoot Networks, Inc.
 # Copyright 2018 VMware, Inc.
 #
@@ -26,9 +26,8 @@
 import os
 import sys
 from glob import glob
-from scapy.utils import rdpcap
-from scapy.layers.all import RawPcapWriter
-from ebpfstf import create_table_file, parse_stf_file
+import scapy.utils as scapy_util
+from .ebpfstf import create_table_file, parse_stf_file
 # path to the tools folder of the compiler
 sys.path.insert(0, os.path.dirname(
     os.path.realpath(__file__)) + '/../../../tools')
@@ -120,7 +119,7 @@ class EBPFTarget(object):
             direction = "in"
             infile = self.filename(iface, direction)
             # Linktype 1 the Ethernet Link Type, see also 'man pcap-linktype'
-            fp = RawPcapWriter(infile, linktype=1)
+            fp = scapy_util.RawPcapWriter(infile, linktype=1)
             fp._write_header(None)
             for pkt_data in pkts:
                 try:
@@ -129,6 +128,14 @@ class EBPFTarget(object):
                     report_err(self.outputs["stderr"],
                                "Invalid packet data", pkt_data)
                     return FAILURE
+            fp.flush()
+            fp.close()
+            # debug -- the bytes in the pcap file should be identical to the
+            # hex strings in the STF file
+            # packets = rdpcap(infile)
+            # for p in packets:
+            #     print(p.convert_to(Raw).show())
+
         return SUCCESS
 
     def generate_model_inputs(self, stffile):
@@ -173,7 +180,7 @@ class EBPFTarget(object):
                 packets = []
             else:
                 try:
-                    packets = rdpcap(file)
+                    packets = scapy_util.rdpcap(file)
                 except Exception as e:
                     report_err(self.outputs["stderr"],
                                "Corrupt pcap file", file, e)
@@ -210,7 +217,7 @@ class EBPFTarget(object):
         if len(self.expected) != 0:
             # Didn't find all the expects we were expecting
             report_err(self.outputs["stderr"], "Expected packets on port(s)",
-                       self.expected.keys(), "not received")
+                       list(self.expected.keys()), "not received")
             return FAILURE
         report_output(self.outputs["stdout"],
                       self.options.verbose, "All went well.")

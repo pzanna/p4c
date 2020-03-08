@@ -71,6 +71,7 @@ add_custom_command(OUTPUT ${P4RUNTIME_GEN_SRCS} ${P4RUNTIME_GEN_HDRS}
 #PROTOBUF_GENERATE_PYTHON (P4RUNTIME_GEN_PYTHON P4RUNTIME_INFO_GEN_HDRS ${P4RUNTIME_INFO_PROTO})
 
 set (CONTROLPLANE_SRCS
+  bytestrings.cpp
   flattenHeader.cpp
   p4RuntimeArchHandler.cpp
   p4RuntimeArchStandard.cpp
@@ -83,6 +84,7 @@ set (CONTROLPLANE_SOURCES
   )
 
 set (CONTROLPLANE_HDRS
+  bytestrings.h
   flattenHeader.h
   p4RuntimeArchHandler.h
   p4RuntimeArchStandard.h
@@ -90,15 +92,12 @@ set (CONTROLPLANE_HDRS
   typeSpecConverter.h
   )
 
-# exclude p4RuntimeSerializer.cpp because it is has issues with
-# include order. It would be nice to implement region-based NOLINT to
-# handle this case.
-add_cpplint_files (${CMAKE_CURRENT_SOURCE_DIR} "${CONTROLPLANE_HDRS}")
+add_cpplint_files (${CMAKE_CURRENT_SOURCE_DIR} "${CONTROLPLANE_HDRS};${CONTROLPLANE_SRCS}")
 
 include_directories (${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 set_source_files_properties (${CONTROLPLANE_SOURCES} PROPERTIES COMPILE_FLAGS "-Wno-unused-parameter")
 set_source_files_properties (${P4RUNTIME_GEN_SRCS} PROPERTIES GENERATED TRUE)
 build_unified(CONTROLPLANE_SOURCES)
 add_library (controlplane STATIC ${CONTROLPLANE_SOURCES} )
-target_link_libraries (controlplane ${PROTOBUF_LIBRARY})
+target_link_libraries (controlplane ${PROTOBUF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 add_dependencies (controlplane mkP4configdir genIR frontend)

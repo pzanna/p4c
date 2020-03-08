@@ -97,16 +97,6 @@ JsonObjects::create_parameters(Util::JsonObject* object) {
     return insert_array_field(object, "parameters");
 }
 
-/// Append a json object r to a parent json array,
-/// insert a field 'op' with 'name' to parent.
-Util::JsonObject*
-JsonObjects::create_primitive(Util::JsonArray* parent, cstring name) {
-    auto result = new Util::JsonObject();
-    result->emplace("op", name);
-    parent->append(result);
-    return result;
-}
-
 void
 JsonObjects::add_program_info(const cstring& name) {
     toplevel->emplace("program", name);
@@ -395,12 +385,14 @@ JsonObjects::add_parser_transition_key(const unsigned state_id, Util::IJson* new
 }
 
 void
-JsonObjects::add_parse_vset(const cstring& name, const unsigned size) {
+JsonObjects::add_parse_vset(const cstring& name, const unsigned bitwidth,
+                            const big_int& size) {
     auto parse_vset = new Util::JsonObject();
     unsigned id = BMV2::nextId("parse_vsets");
     parse_vset->emplace("name", name);
     parse_vset->emplace("id", id);
-    parse_vset->emplace("compressed_bitwidth", size);
+    parse_vset->emplace("compressed_bitwidth", bitwidth);
+    parse_vset->emplace("max_size", size);
     parse_vsets->append(parse_vset);
 }
 

@@ -51,13 +51,11 @@ int DoStrengthReduction::isPowerOf2(const IR::Expression* expr) const {
     auto cst = expr->to<IR::Constant>();
     if (cst == nullptr)
         return -1;
-    mpz_class value = cst->value;
-    if (sgn(value) <= 0)
+    if (cst->value <= 0)
         return -1;
-    auto bitcnt = mpz_popcount(value.get_mpz_t());
-    if (bitcnt != 1)
+    auto log = boost::multiprecision::msb(cst->value);
+    if (log != boost::multiprecision::lsb(cst->value))
         return -1;
-    auto log = mpz_scan1(value.get_mpz_t(), 0);
     // Assumes value does not have more than 2 billion bits
     return log;
 }
@@ -66,10 +64,10 @@ bool DoStrengthReduction::isAllOnes(const IR::Expression* expr) const {
     auto cst = expr->to<IR::Constant>();
     if (cst == nullptr)
         return false;
-    mpz_class value = cst->value;
-    if (sgn(value) <= 0)
+    big_int value = cst->value;
+    if (value <= 0)
         return false;
-    auto bitcnt = mpz_popcount(value.get_mpz_t());
+    auto bitcnt = bitcount(value);
     return bitcnt == (unsigned long)(expr->type->width_bits());
 }
 
@@ -190,12 +188,32 @@ const IR::Node* DoStrengthReduction::postorder(IR::Add* expr) {
 const IR::Node* DoStrengthReduction::postorder(IR::Shl* expr) {
     if (isZero(expr->right) || isZero(expr->left))
         return expr->left;
+    if (auto sh2 = expr->left->to<IR::Shl>()) {
+        if (sh2->right->type->is<IR::Type_InfInt>() &&
+            expr->right->type->is<IR::Type_InfInt>()) {
+            // (a << b) << c is a << (b + c)
+            auto result = new IR::Shl(expr->srcInfo, sh2->left,
+                                      new IR::Add(expr->srcInfo, sh2->right, expr->right));
+            LOG3("Replace " << expr << " with " << result);
+            return result;
+        }
+    }
     return expr;
 }
 
 const IR::Node* DoStrengthReduction::postorder(IR::Shr* expr) {
     if (isZero(expr->right) || isZero(expr->left))
         return expr->left;
+    if (auto sh2 = expr->left->to<IR::Shr>()) {
+        if (sh2->right->type->is<IR::Type_InfInt>() &&
+            expr->right->type->is<IR::Type_InfInt>()) {
+            // (a >> b) >> c is a >> (b + c)
+            auto result = new IR::Shr(expr->srcInfo, sh2->left,
+                                      new IR::Add(expr->srcInfo, sh2->right, expr->right));
+            LOG3("Replace " << expr << " with " << result);
+            return result;
+        }
+    }
     return expr;
 }
 
@@ -250,7 +268,7 @@ const IR::Node* DoStrengthReduction::postorder(IR::Mod* expr) {
         return expr->left;
     auto exp = isPowerOf2(expr->right);
     if (exp >= 0) {
-        mpz_class mask = 1;
+        big_int mask = 1;
         mask = (mask << exp) - 1;
         auto amt = new IR::Constant(expr->right->to<IR::Constant>()->type, mask);
         auto sh = new IR::BAnd(expr->srcInfo, expr->left, amt);
@@ -304,6 +322,18 @@ const IR::Node* DoStrengthReduction::postorder(IR::Slice* expr) {
                     new IR::Slice(cat->right, rwidth-1, expr->getL()));
         }
     }
+
+    // out-of-bound error has been caught in type checking
+    if (auto sl = expr->e0->to<IR::Slice>()) {
+        auto e = sl->e0;
+        auto hi = expr->getH() + sl->getL();
+        auto lo = expr->getL() + sl->getL();
+        return new IR::Slice(e, hi, lo);
+    }
+
+    auto slice_width = expr->getH() - expr->getL() + 1;
+    if (slice_width == (unsigned)expr->e0->type->width_bits())
+        return expr->e0;
 
     return expr;
 }

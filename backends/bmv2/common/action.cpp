@@ -70,9 +70,14 @@ void ActionConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
             auto primitive = mkPrimitive(operation, result);
             auto parameters = mkParameters(primitive);
             primitive->emplace_non_null("source_info", assign->sourceInfoJsonObj());
-            auto left = ctxt->conv->convertLeftValue(l);
-            parameters->append(left);
             bool convertBool = type->is<IR::Type_Boolean>();
+            Util::IJson* left;
+            if (ctxt->conv->isArrayIndexRuntime(l)) {
+                left = ctxt->conv->convert(l, true, true, convertBool);
+            } else {
+                left = ctxt->conv->convertLeftValue(l);
+            }
+            parameters->append(left);
             auto right = ctxt->conv->convert(r, true, true, convertBool);
             parameters->append(right);
             continue;
@@ -129,7 +134,8 @@ void ActionConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 continue;
             }
         }
-        ::error(ErrorType::ERR_UNSUPPORTED, "%1% not yet supported on this target", s);
+        ::error(ErrorType::ERR_UNSUPPORTED,
+                "%1% not yet supported on this target", s);
     }
 }
 
@@ -145,7 +151,7 @@ ActionConverter::convertActionParams(const IR::ParameterList *parameters,
         auto type = ctxt->typeMap->getType(p, true);
         if (!type->is<IR::Type_Bits>())
             ::error(ErrorType::ERR_INVALID,
-                    "action parameters must be bit<> or int<> on this target", p);
+                    "%1%: action parameters must be bit<> or int<> on this target", p);
         param->emplace("bitwidth", type->width_bits());
         params->append(param);
     }

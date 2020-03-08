@@ -35,8 +35,9 @@ using BMV2::stringRepr;
 namespace BMV2 {
 
 void ParseV1Architecture::modelError(const char* format, const IR::Node* node) {
-    ::error(ErrorType::ERR_UNSUPPORTED, format, node);
-    ::error("Are you using an up-to-date v1model.p4?");
+    ::error(ErrorType::ERR_UNSUPPORTED,
+            (cstring("%1%") + format +
+             "\nAre you using an up-to-date v1model.p4?").c_str(), node);
 }
 
 bool ParseV1Architecture::preorder(const IR::PackageBlock* main) {
@@ -108,6 +109,7 @@ ExternConverter_direct_counter ExternConverter_direct_counter::singleton;
 ExternConverter_direct_meter ExternConverter_direct_meter::singleton;
 ExternConverter_action_profile ExternConverter_action_profile::singleton;
 ExternConverter_action_selector ExternConverter_action_selector::singleton;
+ExternConverter_log_msg ExternConverter_log_msg::singleton;
 
 Util::IJson* ExternConverter_clone::convertExternFunction(
     UNUSED ConversionContext* ctxt, UNUSED const P4::ExternFunction* ef,
@@ -643,7 +645,7 @@ void ExternConverter_direct_meter::convertExternInstance(
         // + the meter is incorrectly associated with a table via a
         //   property like 'counters = my_meter;'.
         ::error(ErrorType::ERR_INVALID,
-                "direct meter is not associated with any table"
+                "%1%: direct meter is not associated with any table"
                 " via 'meters' table property", inst);
         return;
     }
@@ -789,6 +791,32 @@ void ExternConverter_action_selector::convertExternInstance(
     }
 
     ctxt->action_profiles->append(action_profile);
+}
+
+Util::IJson* ExternConverter_log_msg::convertExternFunction(
+    ConversionContext* ctxt, UNUSED const P4::ExternFunction* ef,
+    const IR::MethodCallExpression* mc, const IR::StatOrDecl* s,
+    UNUSED const bool emitExterns) {
+    if (mc->arguments->size() != 2 && mc->arguments->size() != 1) {
+        modelError("Expected 1 or 2 arguments for %1%", mc);
+        return nullptr;
+    }
+    auto primitive = mkPrimitive("log_msg");
+    auto params = mkParameters(primitive);
+    primitive->emplace_non_null("source_info", s->sourceInfoJsonObj());
+    auto paramsValue = new Util::JsonObject();
+    paramsValue->emplace("type", "parameters_vector");
+    auto str = ctxt->conv->convert(mc->arguments->at(0)->expression);
+    params->append(str);
+    if (mc->arguments->size() == 2) {
+        auto val = ctxt->conv->convert(mc->arguments->at(1)->expression);
+        paramsValue->emplace("value", val);
+    } else {
+        auto tmp = new Util::JsonObject();
+        paramsValue->emplace("value", tmp);
+    }
+    params->append(paramsValue);
+    return primitive;
 }
 
 void

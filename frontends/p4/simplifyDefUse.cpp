@@ -69,10 +69,12 @@ class FindUninitialized : public Inspector {
     AllDefinitions* definitions;
     bool            lhs;  // checking the lhs of an assignment
     ProgramPoint    currentPoint;  // context of the current expression/statement
-    // For some simple expresssions keep here the read location sets.
-    // This does not include location sets read by subexpressions.
+    /// For some simple expresssions keep here the read location sets.
+    /// This does not include location sets read by subexpressions.
     std::map<const IR::Expression*, const LocationSet*> readLocations;
     HasUses*        hasUses;  // output
+    /// If true the current statement is unreachable
+    bool            unreachable;
 
     const LocationSet* getReads(const IR::Expression* expression, bool nonNull = false) const {
         auto result = ::get(readLocations, expression);
@@ -82,6 +84,7 @@ class FindUninitialized : public Inspector {
     }
     // 'expression' is reading the 'loc' location set
     void reads(const IR::Expression* expression, const LocationSet* loc) {
+        BUG_CHECK(!unreachable, "reached an unreachable expression in FindUninitialized");
         LOG3(expression << " reads " << loc);
         CHECK_NULL(expression);
         CHECK_NULL(loc);
@@ -90,6 +93,10 @@ class FindUninitialized : public Inspector {
     bool setCurrent(const IR::Statement* statement) {
         currentPoint = ProgramPoint(context, statement);
         return false;
+    }
+    profile_t init_apply(const IR::Node *root) {
+        unreachable = false;  // assume not unreachable at the start of any apply
+        return Inspector::init_apply(root);
     }
 
     FindUninitialized(FindUninitialized* parent, ProgramPoint context) :
@@ -152,11 +159,9 @@ class FindUninitialized : public Inspector {
         }
 
         if (checkReturn) {
-            // check returned value
-            auto storage = definitions->storageMap->getRetVal();
-            if (storage != nullptr && defs->hasLocation(storage))
-                // If this definition is "live" it means that we have
-                // not returned on all paths; returns kill this definition.
+            // The final definitions should be unreachable, otherwise
+            // we have not returned on all paths.
+            if (!defs->isUnreachable())
                 ::error("Function %1% does not return a value on all paths", block);
         }
     }
@@ -166,9 +171,11 @@ class FindUninitialized : public Inspector {
         BUG_CHECK(context.isBeforeStart(), "non-empty context in FindUnitialized::P4Control");
         currentPoint = ProgramPoint(control);
         for (auto d : control->controlLocals)
-            if (d->is<IR::Declaration_Instance>())
+            if (d->is<IR::Declaration_Instance>()) {
                 // visit virtual Function implementation if any
                 visit(d);
+            }
+        unreachable = false;
         visit(control->body);
         checkOutParameters(
             control, control->getApplyMethodType()->parameters, getCurrentDefinitions());
@@ -176,10 +183,14 @@ class FindUninitialized : public Inspector {
     }
 
     bool preorder(const IR::Function* func) override {
+        if (findContext<IR::Declaration_Instance>() != nullptr) {
+            // virtual methods.  These are traversed individually at the beginning
+            // before the control body.  We mark each as reachable.
+            unreachable = false;
+        }
+        BUG_CHECK(findContext<IR::P4Program>() == nullptr, "Unexpected function");
         LOG3("FU Visiting function " << func->name << "[" << func->id << "]");
         LOG5(func);
-        // FIXME -- this throws away the context of the current point, which seems wrong,
-        // FIXME -- but otherwise analysis fails
         currentPoint = ProgramPoint(func);
         visit(func->body);
         bool checkReturn = !func->type->returnType->is<IR::Type_Void>();
@@ -190,6 +201,7 @@ class FindUninitialized : public Inspector {
     bool preorder(const IR::P4Parser* parser) override {
         LOG3("FU Visiting parser " << parser->name << "[" << parser->id << "]");
         visit(parser->states, "states");
+        unreachable = false;
         auto accept = ProgramPoint(parser->getDeclByName(IR::ParserState::accept)->getNode());
         auto acceptdefs = definitions->getDefinitions(accept, true);
         if (!acceptdefs->empty())
@@ -200,56 +212,95 @@ class FindUninitialized : public Inspector {
 
     bool preorder(const IR::AssignmentStatement* statement) override {
         LOG3("FU Visiting " << dbp(statement) << " " << statement);
-        auto assign = statement->to<IR::AssignmentStatement>();
-        lhs = true;
-        visit(assign->left);
-        lhs = false;
-        visit(assign->right);
+        if (!unreachable) {
+            lhs = true;
+            visit(statement->left);
+            lhs = false;
+            visit(statement->right);
+        } else {
+            LOG3("Unreachable");
+        }
         return setCurrent(statement);
     }
 
     bool preorder(const IR::ReturnStatement* statement) override {
         LOG3("FU Visiting " << statement);
-        if (statement->expression != nullptr)
+        if (!unreachable && statement->expression != nullptr)
             visit(statement->expression);
+        else
+            LOG3("Unreachable");
+        unreachable = true;
+        return setCurrent(statement);
+    }
+
+    bool preorder(const IR::ExitStatement* statement) override {
+        LOG3("FU Visiting " << statement);
+        unreachable = true;
+        LOG3("Unreachable");
         return setCurrent(statement);
     }
 
     bool preorder(const IR::MethodCallStatement* statement) override {
         LOG3("FU Visiting " << statement);
-        visit(statement->methodCall);
+        if (!unreachable)
+            visit(statement->methodCall);
+        else
+            LOG3("Unreachable");
+
         return setCurrent(statement);
     }
 
     bool preorder(const IR::BlockStatement* statement) override {
         LOG3("FU Visiting " << statement);
-        visit(statement->components, "components");
+        if (!unreachable) {
+            visit(statement->components, "components");
+        } else {
+            LOG3("Unreachable");
+        }
         return setCurrent(statement);
     }
 
     bool preorder(const IR::IfStatement* statement) override {
         LOG3("FU Visiting " << statement);
-        visit(statement->condition);
-        auto saveCurrent = currentPoint;
-        visit(statement->ifTrue);
-        if (statement->ifFalse != nullptr) {
-            currentPoint = saveCurrent;
-            visit(statement->ifFalse);
+        if (!unreachable) {
+            visit(statement->condition);
+            currentPoint = ProgramPoint(context, statement->condition);
+            auto saveCurrent = currentPoint;
+            auto saveUnreachable = unreachable;
+            visit(statement->ifTrue);
+            auto unreachableAfterThen = unreachable;
+            unreachable = saveUnreachable;
+            if (statement->ifFalse != nullptr) {
+                currentPoint = saveCurrent;
+                visit(statement->ifFalse);
+            }
+            unreachable = unreachableAfterThen && unreachable;
+        } else {
+            LOG3("Unreachable");
         }
         return setCurrent(statement);
     }
 
     bool preorder(const IR::SwitchStatement* statement) override {
         LOG3("FU Visiting " << statement);
-        visit(statement->expression);
-        currentPoint = ProgramPoint(context, statement->expression);  // CTD -- added context
-        auto saveCurrent = currentPoint;
-        for (auto c : statement->cases) {
-            if (c->statement != nullptr) {
-                LOG3("Visiting " << c);
-                currentPoint = saveCurrent;
-                visit(c);
+        if (!unreachable) {
+            bool finalUnreachable = true;
+            visit(statement->expression);
+            currentPoint = ProgramPoint(context, statement->expression);
+            auto saveCurrent = currentPoint;
+            auto saveUnreachable = unreachable;
+            for (auto c : statement->cases) {
+                if (c->statement != nullptr) {
+                    LOG3("Visiting " << c);
+                    currentPoint = saveCurrent;
+                    unreachable = saveUnreachable;
+                    visit(c);
+                    finalUnreachable = finalUnreachable && unreachable;
+                }
             }
+            unreachable = finalUnreachable;
+        } else {
+            LOG3("Unreachable");
         }
         return setCurrent(statement);
     }
@@ -297,12 +348,14 @@ class FindUninitialized : public Inspector {
 
     // Keeps track of which expression producers have uses in the given expression
     void registerUses(const IR::Expression* expression, bool reportUninitialized = true) {
+        auto currentDefinitions = getCurrentDefinitions();
+        if (currentDefinitions->isUnreachable())
+            return;
         if (!isFinalRead(getContext(), expression))
             return;
         const LocationSet* read = getReads(expression);
         if (read == nullptr || read->isEmpty())
             return;
-        auto currentDefinitions = getCurrentDefinitions();
         auto points = currentDefinitions->getPoints(read);
         if (reportUninitialized && !lhs && points->containsBeforeStart()) {
             // Do not report uninitialized values on the LHS.
@@ -340,7 +393,9 @@ class FindUninitialized : public Inspector {
     }
 
     bool preorder(const IR::P4Action* action) override {
-        LOG3("FU Visiting " << action);
+        BUG_CHECK(findContext<IR::P4Program>() == nullptr, "Unexpected action");
+        LOG3("FU Visiting action " << action);
+        unreachable = false;
         currentPoint = ProgramPoint(context, action);
         visit(action->body);
         checkOutParameters(action, action->parameters, getCurrentDefinitions());
@@ -477,6 +532,20 @@ class FindUninitialized : public Inspector {
         return false;
     }
 
+    void otherExpression(const IR::Expression* expression) {
+        BUG_CHECK(!lhs, "%1%: unexpected operation on LHS", expression);
+        LOG3("FU Visiting [" << expression->id << "]: " << expression);
+        // This expression in fact reads the result of the operation,
+        // which is a temporary storage location, which we do not model
+        // in the def-use analysis.
+        reads(expression, LocationSet::empty);
+        registerUses(expression);
+    }
+
+    void postorder(const IR::Mux* expression) override {
+        otherExpression(expression);
+    }
+
     bool preorder(const IR::ArrayIndex* expression) override {
         LOG3("FU Visiting [" << expression->id << "]: " << expression);
         if (expression->right->is<IR::Constant>()) {
@@ -505,27 +574,12 @@ class FindUninitialized : public Inspector {
         return false;
     }
 
-    bool preorder(const IR::Operation_Unary* expression) override {
-        BUG_CHECK(!lhs, "%1%: Unary operation on LHS?", expression);
-        visit(expression->expr);
-        // This expression in fact reads the result of the operation,
-        // which is a temporary storage location, which we do not model
-        // in the def-use analysis.
-        reads(expression, LocationSet::empty);
-        registerUses(expression);
-        return false;
+    void postorder(const IR::Operation_Unary* expression) override {
+        otherExpression(expression);
     }
 
-    bool preorder(const IR::Operation_Binary* expression) override {
-        BUG_CHECK(!lhs, "%1%: Binary operation on LHS?", expression);
-        visit(expression->left);
-        visit(expression->right);
-        // This expression in fact reads the result of the operation,
-        // which is a temporary storage location, which we do not model
-        // in the def-use analysis.
-        reads(expression, LocationSet::empty);
-        registerUses(expression);
-        return false;
+    void postorder(const IR::Operation_Binary* expression) override {
+        otherExpression(expression);
     }
 };
 

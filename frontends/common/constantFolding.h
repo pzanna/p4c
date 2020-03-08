@@ -17,8 +17,7 @@ limitations under the License.
 #ifndef _COMMON_CONSTANTFOLDING_H_
 #define _COMMON_CONSTANTFOLDING_H_
 
-#include <gmpxx.h>
-
+#include "lib/gmputil.h"
 #include "ir/ir.h"
 #include "frontends/p4/typeChecking/typeChecker.h"
 
@@ -62,6 +61,9 @@ class DoConstantFolding : public Transform {
 
     /// Maps declaration constants to constant expressions
     std::map<const IR::Declaration_Constant*, const IR::Expression*> constants;
+    // True if we are processing a left side of an assignment; we should not
+    // we substituting constants there.
+    bool assignmentTarget;
 
  protected:
     /// @returns a constant equivalent to @p expr or `nullptr`
@@ -73,7 +75,7 @@ class DoConstantFolding : public Transform {
 
     /// Statically evaluate binary operation @p e implemented by @p func.
     const IR::Node* binary(const IR::Operation_Binary* op,
-                           std::function<mpz_class(mpz_class, mpz_class)> func,
+                           std::function<big_int(big_int, big_int)> func,
                            bool saturating = false);
     /// Statically evaluate comparison operation @p e.
     /// Note that this only handles the case where @p e represents `==` or `!=`.
@@ -104,6 +106,7 @@ class DoConstantFolding : public Transform {
     DoConstantFolding(const ReferenceMap* refMap, TypeMap* typeMap, bool warnings = true) :
             refMap(refMap), typeMap(typeMap), typesKnown(typeMap != nullptr), warnings(warnings) {
         visitDagOnce = true; setName("DoConstantFolding");
+        assignmentTarget = false;
     }
 
     const IR::Node* postorder(IR::Declaration_Constant* d) override;
@@ -140,6 +143,8 @@ class DoConstantFolding : public Transform {
     const IR::Node* postorder(IR::Type_Varbits* type) override;
     const IR::Node* postorder(IR::SelectExpression* e) override;
     const IR::Node* postorder(IR::IfStatement* statement) override;
+    const IR::Node* preorder(IR::AssignmentStatement* statement) override;
+    const IR::Node* preorder(IR::ArrayIndex* e) override;
 };
 
 /** Optionally runs @ref TypeChecking if @p typeMap is not

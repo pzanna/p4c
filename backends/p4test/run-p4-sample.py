@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # Copyright 2013-present Barefoot Networks, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
 
 # Runs the compiler on a sample P4 V1.2 program
 
-from __future__ import print_function
+
 from subprocess import Popen,PIPE
 from threading import Thread
 import errno
@@ -43,6 +43,7 @@ class Options(object):
         self.dumpToJson = False
         self.compilerOptions = []
         self.runDebugger = False
+        self.runDebugger_skip = 0
         self.generateP4Runtime = False
 
 def usage(options):
@@ -117,7 +118,7 @@ def run_timeout(options, args, timeout, stderr):
 
 timeout = 10 * 60
 
-def compare_files(options, produced, expected):
+def compare_files(options, produced, expected, ignore_case):
     if options.replace:
         if options.verbose:
             print("Saving new version of ", expected)
@@ -127,7 +128,10 @@ def compare_files(options, produced, expected):
     if options.verbose:
         print("Comparing", expected, "and", produced)
 
-    cmd = ("diff -B -u -w " + expected + " " + produced + " >&2")
+    args = "-B -u -w";
+    if ignore_case:
+        args = args + " -i";
+    cmd = ("diff " + args + " " + expected + " " + produced + " >&2")
     if options.verbose:
         print(cmd)
     exitcode = subprocess.call(cmd, shell=True);
@@ -141,11 +145,17 @@ def recompile_file(options, produced, mustBeIdentical):
     secondFile = produced + "-x";
     args = ["./p4test", "-I.", "--pp", secondFile, "--std", "p4-16", produced] + \
             options.compilerOptions
+    if options.runDebugger:
+        if options.runDebugger_skip > 0:
+            options.runDebugger_skip = options.runDebugger_skip - 1
+        else:
+            args[0:0] = options.runDebugger.split()
+            os.execvp(args[0], args)
     result = run_timeout(options, args, timeout, None)
     if result != SUCCESS:
         return result
     if mustBeIdentical:
-        result = compare_files(options, produced, secondFile)
+        result = compare_files(options, produced, secondFile, false)
     return result
 
 def check_generated_files(options, tmpdir, expecteddir):
@@ -160,7 +170,7 @@ def check_generated_files(options, tmpdir, expecteddir):
                 print("Expected file does not exist; creating", expected)
             shutil.copy2(produced, expected)
         else:
-            result = compare_files(options, produced, expected)
+            result = compare_files(options, produced, expected, file[-7:] == "-stderr")
             if result != SUCCESS and (file[-7:] != "-stderr" or not ignoreStderr(options)):
                 return result
     return SUCCESS
@@ -196,7 +206,7 @@ def process_file(options, argv):
     if options.verbose:
         print("Writing temporary files into ", tmpdir)
     ppfile = tmpdir + "/" + basename                  # after parsing
-    referenceOutputs = ",".join(rename.keys())
+    referenceOutputs = ",".join(list(rename.keys()))
     stderr = tmpdir + "/" + basename + "-stderr"
     p4runtimeFile = tmpdir + "/" + basename + ".p4info.txt"
     p4runtimeEntriesFile = tmpdir + "/" + basename + ".entries.txt"
@@ -219,7 +229,7 @@ def process_file(options, argv):
     def getArch(path):
         v1Pattern = re.compile('include.*v1model\.p4')
         psaPattern = re.compile('include.*psa\.p4')
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             for line in f:
                 if v1Pattern.search(line):
                     return "v1model"
@@ -242,8 +252,11 @@ def process_file(options, argv):
         args.extend(["--std", "p4-14"]);
     args.extend(argv)
     if options.runDebugger:
-        args[0:0] = options.runDebugger.split()
-        os.execvp(args[0], args)
+        if options.runDebugger_skip > 0:
+            options.runDebugger_skip = options.runDebugger_skip - 1
+        else:
+            args[0:0] = options.runDebugger.split()
+            os.execvp(args[0], args)
     result = run_timeout(options, args, timeout, stderr)
 
     if result != SUCCESS:
@@ -333,8 +346,10 @@ def main(argv):
                 argv = argv[1:]
         elif argv[0][1] == 'D' or argv[0][1] == 'I' or argv[0][1] == 'T':
             options.compilerOptions.append(argv[0])
-        elif argv[0] == "-gdb":
+        elif argv[0][0:4] == "-gdb":
             options.runDebugger = "gdb --args"
+            if len(argv[0]) > 4:
+                options.runDebugger_skip = int(argv[0][4:]) - 1
         elif argv[0] == "--p4runtime":
             options.generateP4Runtime = True
         else:

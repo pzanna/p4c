@@ -2,10 +2,14 @@
 
 # p4c
 
-p4c is a new, alpha-quality reference compiler for the P4 programming language.
+p4c is a reference compiler for the P4 programming language.
 It supports both P4-14 and P4-16; you can find more information about P4
 [here](http://p4.org) and the specifications for both versions of the language
 [here](https://p4.org/specs).
+One fact attesting to the level of quality and completeness of p4c's
+code is that its front-end code, mid-end code, and p4c-graphs back end
+are used as the basis for at least one commercially supported P4
+compiler.
 
 p4c is modular; it provides a standard frontend and midend which can be combined
 with a target-specific backend to create a complete P4 compiler. The goal is to
@@ -104,7 +108,8 @@ dot -Tpdf ParserImpl.dot > ParserImpl.pdf
 
 2.  Install [dependencies](#dependencies). You can find specific instructions
     for Ubuntu 16.04 [here](#ubuntu-dependencies) and for macOS 10.12
-    [here](#macos-dependencies).
+    [here](#macos-dependencies).  You can also look at the
+    [travis installation script](tools/travis-build).
 
 3.  Build. Building should also take place in a subdirectory named `build`.
     ```
@@ -193,10 +198,14 @@ included with `p4c` are documented here:
 
 Most dependencies can be installed using `apt-get install`:
 
-`sudo apt-get install cmake g++ git automake libtool libgc-dev bison flex
+```bash
+$ sudo apt-get install cmake g++ git automake libtool libgc-dev bison flex
 libfl-dev libgmp-dev libboost-dev libboost-iostreams-dev
-libboost-graph-dev llvm pkg-config python python-scapy python-ipaddr python-ply
-tcpdump`
+libboost-graph-dev llvm pkg-config python python-scapy python-ipaddr python-ply python3-pip
+tcpdump
+
+$ pip3 install scapy ply
+```
 
 For documentation building:
 `sudo apt-get install -y doxygen graphviz texlive-full`
@@ -206,17 +215,17 @@ which is not available until Ubuntu 16.10. For earlier releases of Ubuntu,
 you'll need to install from source. You can find instructions
 [here](https://github.com/google/protobuf/blob/master/src/README.md). **We
 recommend that you use version
-[3.2.0](https://github.com/google/protobuf/releases/tag/v3.2.0)**. Earlier
+[3.6.1](https://github.com/google/protobuf/releases/tag/v3.6.1)**. Earlier
 versions in the 3 series may not be supported by other p4lang projects, such as
 [p4lang/PI](https://github.com/p4lang/PI). More recent versions may work as
-well, but all our CI testing is done with version 3.2.0. After cloning protobuf
-and before you build, check-out version 3.2.0:
+well, but all our CI testing is done with version 3.6.1. After cloning protobuf
+and before you build, check-out version 3.6.1:
 
-`git checkout v3.2.0`
+`git checkout v3.6.1`
 
 Please note that while all protobuf versions newer than 3.0 should work for
 `p4c` itself, you may run into trouble with some extensions and other p4lang
-projects unless you install version 3.2.0, so you may want to install from
+projects unless you install version 3.6.1, so you may want to install from
 source even on newer releases of Ubuntu.
 
 ## macOS dependencies
@@ -429,11 +438,11 @@ install (FILES ${CMAKE_CURRENT_SOURCE_DIR}/driver/p4c.mybackend.cfg
 
 # Known issues
 
-The P4C compiler is in early development. Issues with the compiler are
-tracked on [GitHub](https://github.com/p4lang/p4c/issues). Before
-opening a new issue, please check whether a similar issue is already
-opened. Opening issues and submitting a pull request with fixes for
-those issues is much appreciated.
+Issues with the compiler are tracked on
+[GitHub](https://github.com/p4lang/p4c/issues). Before opening a new
+issue, please check whether a similar issue is already opened. Opening
+issues and submitting a pull request with fixes for those issues is
+much appreciated.
 
 In addition to the list of issues on Github, there are a number of
 currently unsupported features listed below:
@@ -448,7 +457,7 @@ access them from the IR
 
 * Nonstandard extension primitives from P4_14
   * Execute_meter extra arguments
-  * Recirculate variants
+  * Recirculate/clone/resubmit variants
   * Bypass_egress
   * Sample_ primitives
   * invalidate

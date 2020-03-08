@@ -18,6 +18,7 @@
 #ifndef _BACKENDS_GRAPHS_PARSERS_H_
 #define _BACKENDS_GRAPHS_PARSERS_H_
 
+#include "frontends/common/resolveReferences/referenceMap.h"
 #include "ir/ir.h"
 #include "lib/cstring.h"
 #include "lib/nullstream.h"
@@ -27,6 +28,7 @@
 namespace P4 {
 // Forward declaration to avoid includes
 class TypeMap;
+class ReferenceMap;
 }  // end namespace P4
 
 namespace graphs {

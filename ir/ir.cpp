@@ -172,7 +172,7 @@ P4Table::getApplyMethodType() const {
     // Synthesize a new type for the return
     auto actions = properties->getProperty(IR::TableProperties::actionsPropertyName);
     if (actions == nullptr) {
-        ::error(ErrorType::ERR_INVALID, "table does not contain a list of actions", this);
+        ::error(ErrorType::ERR_INVALID, "%1%: table does not contain a list of actions", this);
         return nullptr;
     }
     if (!actions->value->is<IR::ActionList>())
@@ -180,8 +180,9 @@ P4Table::getApplyMethodType() const {
             actions);
     auto alv = actions->value->to<IR::ActionList>();
     auto hit = new IR::StructField(IR::Type_Table::hit, IR::Type_Boolean::get());
+    auto miss = new IR::StructField(IR::Type_Table::miss, IR::Type_Boolean::get());
     auto label = new IR::StructField(IR::Type_Table::action_run, new IR::Type_ActionEnum(alv));
-    auto rettype = new IR::Type_Struct(ID(name), { hit, label });
+    auto rettype = new IR::Type_Struct(ID(name), { hit, miss, label });
     auto applyMethod = new IR::Type_Method(rettype, new IR::ParameterList());
     return applyMethod;
 }
@@ -254,7 +255,7 @@ const IR::PackageBlock* ToplevelBlock::getMain() const {
         return nullptr;
     }
     if (!main->is<IR::Declaration_Instance>()) {
-        ::error(ErrorType::ERR_INVALID, "must be a package declaration", main->getNode());
+        ::error(ErrorType::ERR_INVALID, "%1$: must be a package declaration", main->getNode());
         return nullptr;
     }
     auto block = getValue(main->getNode());
