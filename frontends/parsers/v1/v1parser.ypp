@@ -335,14 +335,14 @@ attrib:
 
 opt_length: /* epsilon */
     | LENGTH ":" expression ";"  /* const_expression or name */
-      { $<HeaderType>-1.annotations->emplace_back(@1+@4, "length",
-              IR::Vector<IR::Expression>($3)); }
+      { $<HeaderType>-1.annotations->emplace_back(
+          IR::Annotation(@1+@4, "length", IR::Vector<IR::Expression>($3))); }
     ;
 
 opt_max_length: /* epsilon */
     | MAX_LENGTH ":" const_expression ";"
-      { $<HeaderType>-2.annotations->emplace_back(@1+@4, "max_length",
-              IR::Vector<IR::Expression>($3)); }
+      { $<HeaderType>-2.annotations->emplace_back(
+          IR::Annotation(@1+@4, "max_length", IR::Vector<IR::Expression>($3))); }
     ;
 
 type: BIT { $$ = IR::Type::Bits::get(@1, 1); }
@@ -886,9 +886,9 @@ blackbox_attribute: /* epsilon */ { $$ = new IR::Attribute($<IR::ID>-1); }
 
 blackbox_method: { $$ = new IR::Annotations; }
     | blackbox_method READS "{" opt_name_list "}"
-        { ($$=$1)->add(new IR::Annotation(@2, $2, driver.makeExpressionList($4))); }
+       { ($$=$1)->add(new IR::Annotation(@2, $2, driver.makeExpressionList($4))); }
     | blackbox_method WRITES "{" opt_name_list "}"
-        { ($$=$1)->add(new IR::Annotation(@2, $2, driver.makeExpressionList($4))); }
+       { ($$=$1)->add(new IR::Annotation(@2, $2, driver.makeExpressionList($4))); }
 ;
 
 opt_argument_list:

@@ -66,6 +66,7 @@ extern packet_out {
 extern void verify(in bool check, in error toSignal);
 
 /// Built-in action that does nothing.
+@noWarn("unused")
 action NoAction() {}
 
 /// Standard match kinds for table key fields.

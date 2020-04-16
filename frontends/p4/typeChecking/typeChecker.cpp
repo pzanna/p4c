@@ -569,7 +569,7 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         (void)result->apply(*tc);
         return result;
     } else {
-        BUG("Unexpected type %1%", dbp(type));
+        BUG_CHECK(::errorCount(), "Unexpected type %1%", dbp(type));
     }
 
     // If we reach this point some type error must have occurred, because
@@ -678,6 +678,8 @@ const IR::Node* TypeInference::postorder(IR::Declaration_Variable* decl) {
 }
 
 bool TypeInference::canCastBetween(const IR::Type* dest, const IR::Type* src) const {
+    if (src->is<IR::Type_Action>())
+        return false;
     if (src == dest)
         return true;
 
@@ -745,11 +747,11 @@ TypeInference::assignment(const IR::Node* errorPosition, const IR::Type* destTyp
     }
     if (initType->is<IR::Type_UnknownStruct>()) {
         if (auto ts = destType->to<IR::Type_StructLike>()) {
-            auto si = sourceExpression->to<IR::StructInitializerExpression>();
+            auto si = sourceExpression->to<IR::StructExpression>();
             CHECK_NULL(si);
             bool cst = isCompileTimeConstant(sourceExpression);
             auto type = new IR::Type_Name(ts->name);
-            sourceExpression = new IR::StructInitializerExpression(
+            sourceExpression = new IR::StructExpression(
                 type, type, si->components);
             setType(sourceExpression, destType);
             if (cst)
@@ -758,6 +760,31 @@ TypeInference::assignment(const IR::Node* errorPosition, const IR::Type* destTyp
     }
 
     return sourceExpression;
+}
+
+const IR::Node* TypeInference::postorder(IR::Annotation* annotation) {
+    auto checkAnnotation = [this] (const IR::Expression* e) {
+        if (!isCompileTimeConstant(e))
+            typeError("%1%: structured annotation must be compile-time constant values", e);
+        auto t = getType(e);
+        if (!t->is<IR::Type_InfInt>() &&
+            !t->is<IR::Type_String>() &&
+            !t->is<IR::Type_Boolean>())
+            typeError("%1%: illegal type for structured annotation; must be int, string or bool",
+                      e);
+    };
+
+    if (annotation->structured) {
+        // If it happens here it was created in the compiler, so it's a bug, not an error.
+        BUG_CHECK(annotation->expr.empty() || annotation->kv.empty(),
+                  "%1%: structured annotations cannot contain expressions and kv-pairs",
+                  annotation);
+        for (auto e : annotation->expr)
+            checkAnnotation(e);
+        for (auto e : annotation->kv)
+            checkAnnotation(e->expression);
+    }
+    return annotation;
 }
 
 const IR::Node* TypeInference::postorder(IR::Declaration_Constant* decl) {
@@ -1342,20 +1369,27 @@ const IR::Node* TypeInference::postorder(IR::Type_Stack* type) {
     return type;
 }
 
-void TypeInference::validateFields(const IR::Type* type,
+/// Validate the fields of a struct type using the supplied checker.
+/// The checker returns "false" when a field is invalid.
+/// Return true on success
+bool TypeInference::validateFields(const IR::Type* type,
                                    std::function<bool(const IR::Type*)> checker) const {
     if (type == nullptr)
-        return;
+        return false;
     BUG_CHECK(type->is<IR::Type_StructLike>(), "%1%; expected a Struct-like", type);
     auto strct = type->to<IR::Type_StructLike>();
+    bool err = false;
     for (auto field : strct->fields) {
         auto ftype = getType(field);
         if (ftype == nullptr)
-            return;
-        if (!checker(ftype))
+            return false;
+        if (!checker(ftype)) {
             typeError("Field %1% of %2% cannot have type %3%",
                       field, type->toString(), field->type);
+            err = true;
+        }
     }
+    return !err;
 }
 
 const IR::Node* TypeInference::postorder(IR::StructField* field) {
@@ -1379,7 +1413,8 @@ const IR::Node* TypeInference::postorder(IR::Type_Header* type) {
                // Experimental feature - see Issue 383.
                (t->is<IR::Type_Struct>() && onlyBitsOrBitStructs(t)) ||
                t->is<IR::Type_SerEnum>() || t->is<IR::Type_Boolean>(); };
-    validateFields(canon, validator);
+    if (!validateFields(canon, validator))
+        return type;
 
     const IR::StructField* varbit = nullptr;
     for (auto field : type->fields) {
@@ -1410,14 +1445,14 @@ const IR::Node* TypeInference::postorder(IR::Type_Struct* type) {
         t->is<IR::Type_Boolean>() || t->is<IR::Type_Stack>() ||
         t->is<IR::Type_Varbits>() || t->is<IR::Type_ActionEnum>() ||
         t->is<IR::Type_Tuple>() || t->is<IR::Type_SerEnum>(); };
-    validateFields(canon, validator);
+    (void)validateFields(canon, validator);
     return type;
 }
 
 const IR::Node* TypeInference::postorder(IR::Type_HeaderUnion *type) {
     auto canon = setTypeType(type);
     auto validator = [] (const IR::Type* t) { return t->is<IR::Type_Header>(); };
-    validateFields(canon, validator);
+    (void)validateFields(canon, validator);
     return type;
 }
 
@@ -1515,6 +1550,12 @@ const IR::Node* TypeInference::postorder(IR::Operation_Relation* expression) {
     }
 
     if (equTest) {
+        if (ltype->is<IR::Type_Action>() || rtype->is<IR::Type_Action>()) {
+            // Actions return Type_Action instead of void.
+            typeError("%1%: cannot be applied to action results", expression);
+            return expression;
+        }
+
         bool defined = false;
         if (TypeMap::equivalent(ltype, rtype) &&
             (!ltype->is<IR::Type_Void>() && !ltype->is<IR::Type_Varbits>())) {
@@ -1556,23 +1597,23 @@ const IR::Node* TypeInference::postorder(IR::Operation_Relation* expression) {
                 }
 
                 if (ls != nullptr) {
-                    auto l = expression->left->to<IR::StructInitializerExpression>();
+                    auto l = expression->left->to<IR::StructExpression>();
                     CHECK_NULL(l);  // struct initializers are the only expressions that can
                                     // have StructUnknown types
                     BUG_CHECK(rtype->is<IR::Type_StructLike>(), "%1%: expected a struct", rtype);
                     auto type = new IR::Type_Name(rtype->to<IR::Type_StructLike>()->name);
-                    expression->left = new IR::StructInitializerExpression(
+                    expression->left = new IR::StructExpression(
                         expression->left->srcInfo, type, type, l->components);
                     setType(expression->left, rtype);
                     if (lcst)
                         setCompileTimeConstant(expression->left);
                 } else {
-                    auto r = expression->right->to<IR::StructInitializerExpression>();
+                    auto r = expression->right->to<IR::StructExpression>();
                     CHECK_NULL(r);  // struct initializers are the only expressions that can
                                     // have StructUnknown types
                     BUG_CHECK(ltype->is<IR::Type_StructLike>(), "%1%: expected a struct", ltype);
                     auto type = new IR::Type_Name(ltype->to<IR::Type_StructLike>()->name);
-                    expression->right = new IR::StructInitializerExpression(
+                    expression->right = new IR::StructExpression(
                         expression->right->srcInfo, type, type, r->components);
                     setType(expression->right, rtype);
                     if (rcst)
@@ -1812,7 +1853,7 @@ const IR::Node* TypeInference::postorder(IR::ListExpression* expression) {
     return expression;
 }
 
-const IR::Node* TypeInference::postorder(IR::StructInitializerExpression* expression) {
+const IR::Node* TypeInference::postorder(IR::StructExpression* expression) {
     if (done()) return expression;
     bool constant = true;
     auto components = new IR::IndexedVector<IR::StructField>();
@@ -2282,11 +2323,35 @@ const IR::Node* TypeInference::postorder(IR::Cast* expression) {
     if (sourceType == nullptr || castType == nullptr)
         return expression;
 
+    if (auto st = castType->to<IR::Type_StructLike>()) {
+        if (auto se = expression->expr->to<IR::StructExpression>()) {
+            // Interpret (S) { kvpairs } as a struct initializer expression
+            // instead of a cast to a struct.
+            if (se->type == nullptr || se->type->is<IR::Type_Unknown>() ||
+                se->type->is<IR::Type_UnknownStruct>()) {
+                auto type = new IR::Type_Name(st->name);
+                setType(type, new IR::Type_Type(st));
+                auto sie = new IR::StructExpression(
+                    se->srcInfo, type, se->components);
+                auto result = postorder(sie);  // may insert casts
+                setType(result, st);
+                return result;
+            } else {
+                auto sit = getTypeType(se->type);
+                if (TypeMap::equivalent(st, sit))
+                    return expression->expr;
+                else
+                    typeError("%1%: cast not supported", expression->destType);
+                return expression;
+            }
+        }
+    }
+
     if (!castType->is<IR::Type_Bits>() &&
         !castType->is<IR::Type_Boolean>() &&
         !castType->is<IR::Type_Newtype>() &&
         !castType->is<IR::Type_SerEnum>()) {
-        ::error("%1%: cast not supported", expression->destType);
+        typeError("%1%: cast not supported", expression->destType);
         return expression;
     }
 
@@ -3006,7 +3071,7 @@ const IR::Node* TypeInference::postorder(IR::MethodCallExpression* expression) {
 
         // We build a type for the callExpression and unify it with the method expression
         // Allocate a fresh variable for the return type; it will be hopefully bound in the process.
-        auto rettype = new IR::Type_Var(IR::ID(refMap->newName("R"), nullptr));
+        auto rettype = new IR::Type_Var(IR::ID(refMap->newName("R"), "return type"));
         auto args = new IR::Vector<IR::ArgumentInfo>();
         bool constArgs = true;
         for (auto aarg : *expression->arguments) {
@@ -3058,7 +3123,7 @@ const IR::Node* TypeInference::postorder(IR::MethodCallExpression* expression) {
 
         auto returnType = tvs->lookup(rettype);
         if (returnType == nullptr) {
-            typeError("Cannot infer return type %1%", expression);
+            typeError("Cannot infer a concrete return type for this call of %1%", expression);
             return expression;
         }
         if (returnType->is<IR::Type_Control>() ||

@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20200408
 #include <v1model.p4>
 
 struct intrinsic_metadata_t {
@@ -47,15 +48,15 @@ struct tuple_0 {
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("._nop") action _nop() {
     }
     @name("._recirculate") action _recirculate() {
-        recirculate<tuple_0>({ standard_metadata, metaA_t {f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
+        recirculate<tuple_0>({ standard_metadata, (metaA_t){f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
     }
     @name("._clone_e2e") action _clone_e2e(bit<32> mirror_id) {
-        clone3<tuple_0>(CloneType.E2E, mirror_id, { standard_metadata, metaA_t {f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
+        clone3<tuple_0>(CloneType.E2E, mirror_id, { standard_metadata, (metaA_t){f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
     }
     @name(".t_egress") table t_egress_0 {
         actions = {
@@ -77,9 +78,9 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_1() {
+    @noWarn("unused") @name(".NoAction") action NoAction_1() {
     }
-    @name(".NoAction") action NoAction_5() {
+    @noWarn("unused") @name(".NoAction") action NoAction_5() {
     }
     @name("._nop") action _nop_2() {
     }
@@ -93,10 +94,10 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         standard_metadata.mcast_grp = mgrp;
     }
     @name("._resubmit") action _resubmit() {
-        resubmit<tuple_0>({ standard_metadata, metaA_t {f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
+        resubmit<tuple_0>({ standard_metadata, (metaA_t){f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
     }
     @name("._clone_i2e") action _clone_i2e(bit<32> mirror_id) {
-        clone3<tuple_0>(CloneType.I2E, mirror_id, { standard_metadata, metaA_t {f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
+        clone3<tuple_0>(CloneType.I2E, mirror_id, { standard_metadata, (metaA_t){f1 = meta._metaA_f10,f2 = meta._metaA_f21} });
     }
     @name(".t_ingress_1") table t_ingress {
         actions = {

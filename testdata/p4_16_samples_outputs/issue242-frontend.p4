@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> EthernetAddress;
@@ -64,7 +65,7 @@ control Eg(inout Headers hdrs, inout Metadata meta, inout standard_metadata_t st
     @name("Eg.debug") register<bit<32>>(32w100) debug_0;
     @name("Eg.reg") register<bit<32>>(32w1) reg_0;
     @name("Eg.test") action test() {
-        val_0 = { 32w0 };
+        val_0 = (Value){field1 = 32w0};
         _pred_0 = val_0.field1 != 32w0;
         if (_pred_0) {
             tmp = 32w1;

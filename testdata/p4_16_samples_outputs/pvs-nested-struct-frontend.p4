@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 header data_h {
@@ -43,7 +44,7 @@ control MyVerifyChecksum(inout my_packet hdr, inout my_metadata meta) {
 }
 
 control MyIngress(inout my_packet p, inout my_metadata meta, inout standard_metadata_t s) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("MyIngress.set_data") action set_data() {
     }

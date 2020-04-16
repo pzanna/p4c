@@ -492,7 +492,7 @@ class FixupExtern : public Modifier {
     void postorder(IR::Type_Extern *type) override {
         if (extname != type->name) {
             type->annotations = type->annotations->addAnnotationIfNew(
-                IR::Annotation::nameAnnotation, new IR::StringLiteral(type->name.name));
+                IR::Annotation::nameAnnotation, new IR::StringLiteral(type->name.name), false);
             type->name = extname; }
         // FIXME -- should create ctors based on attributes?  For now just create a
         // FIXME -- 0-arg one if needed

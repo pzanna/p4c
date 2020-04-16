@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> EthernetAddress;
@@ -30,7 +31,7 @@ control verifyChecksum(inout headers_t hdr, inout metadata_t meta) {
 control ingressImpl(inout headers_t hdr, inout metadata_t meta, inout standard_metadata_t stdmeta) {
     bit<48> key_1;
     bit<16> key_2;
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("ingressImpl.my_drop") action my_drop() {
         mark_to_drop(stdmeta);

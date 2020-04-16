@@ -23,6 +23,7 @@ limitations under the License.
 #include <algorithm>
 
 #include "lib/path.h"
+#include "lib/bitops.h"
 #include "lib/gmputil.h"
 #include "converters.h"
 
@@ -58,8 +59,7 @@ const IR::Annotations*
 ProgramStructure::addNameAnnotation(cstring name, const IR::Annotations* annos) {
     if (annos == nullptr)
         annos = IR::Annotations::empty;
-    return annos->addAnnotationIfNew(IR::Annotation::nameAnnotation,
-                                     new IR::StringLiteral(name));
+    return annos->addAnnotationIfNew(IR::Annotation::nameAnnotation, new IR::StringLiteral(name));
 }
 
 const IR::Annotations*
@@ -418,8 +418,9 @@ ProgramStructure::explodeType(const std::vector<const IR::Type::Bits *> &fieldTy
  * @param stateful   If any declaration is created during the conversion, save to 'stateful'
  * @returns          The P4-16 parser state corresponding to the P4-14 parser
  */
-const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parser,
-                                    IR::IndexedVector<IR::Declaration>* stateful) {
+const IR::ParserState*
+ProgramStructure::convertParser(const IR::V1Parser* parser,
+                                IR::IndexedVector<IR::Declaration>* stateful) {
     ExpressionConverter conv(this);
 
     latest = nullptr;
@@ -444,6 +445,7 @@ const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parse
             }
         }
         BUG_CHECK(list->components.size() > 0, "No select expression in %1%", parser);
+
         // select always expects a ListExpression
         IR::Vector<IR::SelectCase> cases;
         for (auto c : *parser->cases) {
@@ -462,6 +464,10 @@ const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parse
                             first->path->name);
                     return nullptr;
                 }
+
+                if (value_sets_implemented.count(first->path->name))
+                    continue;
+                value_sets_implemented.emplace(first->path->name);
 
                 auto type = explodeType(fieldTypes);
                 auto sizeAnnotation = value_set->annotations->getSingle("parser_value_set_size");
@@ -597,7 +603,9 @@ void ProgramStructure::include(cstring filename, cstring ppoptions) {
 
 void ProgramStructure::loadModel() {
     // This includes in turn core.p4
-    include("v1model.p4");
+    std::stringstream versionArg;
+    versionArg << "-DV1MODEL_VERSION=" << V1Model::instance.version;
+    include(V1Model::instance.file.name, versionArg.str());
 
     metadataInstances.insert(v1model.standardMetadataType.name);
     metadataTypes.insert(v1model.standardMetadataType.name);
@@ -804,9 +812,9 @@ ProgramStructure::convertActionProfile(const IR::ActionProfile* action_profile, 
         auto width = new IR::Constant(v1model.action_selector.widthType, flc->output_width);
         args->push_back(new IR::Argument(width));
         if (action_selector->mode)
-            annos = annos->addAnnotation("mode", new IR::StringLiteral(action_selector->mode));
+            annos = annos->addAnnotation( "mode", new IR::StringLiteral(action_selector->mode));
         if (action_selector->type)
-            annos = annos->addAnnotation("type", new IR::StringLiteral(action_selector->type));
+            annos = annos->addAnnotation( "type", new IR::StringLiteral(action_selector->type));
         auto fl = getFieldLists(flc);
         for (auto annot : fl->annotations->annotations) {
             annos = annos->add(annot);
@@ -1470,7 +1478,7 @@ CONVERT_PRIMITIVE(count) {
     auto counterref = new IR::PathExpression(newname);
     auto methodName = structure->v1model.counter.increment.Id();
     auto method = new IR::Member(counterref, methodName);
-    auto arg = new IR::Cast(structure->v1model.counter.index_type,
+    auto arg = new IR::Cast(IR::Type::Bits::get(counter->index_width()),
                             conv.convert(primitive->operands.at(1)));
     return new IR::MethodCallStatement(
         primitive->srcInfo, method, { new IR::Argument(arg) });
@@ -1610,7 +1618,7 @@ CONVERT_PRIMITIVE(execute_meter) {
     auto methodName = structure->v1model.meter.executeMeter.Id();
     auto method = new IR::Member(meterref, methodName);
     auto args = new IR::Vector<IR::Argument>();
-    auto arg = new IR::Cast(structure->v1model.meter.index_type,
+    auto arg = new IR::Cast(IR::Type::Bits::get(meter->index_width()),
                             conv.convert(primitive->operands.at(1)));
     args->push_back(new IR::Argument(arg));
     auto dest = conv.convert(primitive->operands.at(2));
@@ -1716,7 +1724,7 @@ CONVERT_PRIMITIVE(register_read) {
     auto methodName = structure->v1model.registers.read.Id();
     auto method = new IR::Member(registerref, methodName);
     auto args = new IR::Vector<IR::Argument>();
-    auto arg = new IR::Cast(structure->v1model.registers.index_type,
+    auto arg = new IR::Cast(IR::Type::Bits::get(reg->index_width()),
                             conv.convert(primitive->operands.at(2)));
     args->push_back(new IR::Argument(left));
     args->push_back(new IR::Argument(arg));
@@ -1749,7 +1757,7 @@ CONVERT_PRIMITIVE(register_write) {
     auto method = new IR::Member(registerref, methodName);
     auto args = new IR::Vector<IR::Argument>();
     auto arg0 = new IR::Cast(primitive->operands.at(1)->srcInfo,
-                             structure->v1model.registers.index_type,
+                             IR::Type::Bits::get(reg->index_width()),
                              conv.convert(primitive->operands.at(1)));
     const IR::Expression* arg1 = conv.convert(primitive->operands.at(2));
     if (castType != nullptr)
@@ -1946,8 +1954,8 @@ ProgramStructure::convert(const IR::Register* reg, cstring newName,
     IR::ID ext = v1model.registers.Id();
     auto typepath = new IR::Path(ext);
     auto type = new IR::Type_Name(typepath);
-    auto typeargs = new IR::Vector<IR::Type>();
-    typeargs->push_back(regElementType);
+    auto typeargs = new IR::Vector<IR::Type>({ regElementType,
+                                               IR::Type::Bits::get(reg->index_width()) });
     auto spectype = new IR::Type_Specialized(type, typeargs);
     auto args = new IR::Vector<IR::Argument>();
     if (reg->direct) {
@@ -1971,7 +1979,8 @@ ProgramStructure::convert(const IR::CounterOrMeter* cm, cstring newName) {
     else
         ext = v1model.meter.Id();
     auto typepath = new IR::Path(ext);
-    auto type = new IR::Type_Name(typepath);
+    auto type = new IR::Type_Specialized(new IR::Type_Name(typepath),
+        new IR::Vector<IR::Type>({ IR::Type_Bits::get(cm->index_width()) }));
     auto args = new IR::Vector<IR::Argument>();
     args->push_back(
         new IR::Argument(cm->srcInfo,
@@ -2469,19 +2478,19 @@ void ProgramStructure::createChecksumUpdates() {
             auto mc = new IR::MethodCallStatement(methodCallExpression);
             if (flc->algorithm->names[0] == "csum16_udp") {
                 auto zeros_as_ones_annot = new IR::Annotation(IR::ID("zeros_as_ones"),
-                                            {methodCallExpression});
+                                                              {methodCallExpression}, false);
                 body->annotations = body->annotations->add(zeros_as_ones_annot);
             }
 
             for (auto annot : cf->annotations->annotations) {
-                auto newAnnot = new IR::Annotation(annot->name, {});
+                auto newAnnot = new IR::Annotation(annot->name, {}, false);
                 for (auto expr : annot->expr)
                     newAnnot->expr.push_back(expr);
                 newAnnot->expr.push_back(methodCallExpression);
                 body->annotations = body->annotations->add(newAnnot);
             }
             for (auto annot : flc->annotations->annotations) {
-                auto newAnnot = new IR::Annotation(annot->name, {});
+                auto newAnnot = new IR::Annotation(annot->name, {}, false);
                 for (auto expr : annot->expr)
                     newAnnot->expr.push_back(expr);
                 newAnnot->expr.push_back(methodCallExpression);

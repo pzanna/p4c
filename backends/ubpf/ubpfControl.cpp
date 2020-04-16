@@ -27,8 +27,7 @@ namespace UBPF {
 
     UBPFControlBodyTranslator::UBPFControlBodyTranslator(
             const UBPFControl *control) :
-            CodeGenInspector(control->program->refMap,
-                             control->program->typeMap), control(control),
+            EBPF::ControlBodyTranslator(control), control(control),
             p4lib(P4::P4CoreLibrary::instance) {
         setName("UBPFControlBodyTranslator");
     }
@@ -56,19 +55,20 @@ namespace UBPF {
         } else if (function->method->name.name == control->program->model.hash.name) {
             cstring hashKeyInstanceName = createHashKeyInstance(function);
 
-            auto algorithmTypeArgument = function->expr->arguments->at(1)->expression->to<IR::Member>();
+            auto algorithmTypeArgument =
+                    function->expr->arguments->at(1)->expression->to<IR::Member>();
             auto algorithmType = algorithmTypeArgument->member.name;
 
             if (algorithmType == control->program->model.hashAlgorithm.lookup3.name) {
-                builder->appendFormat(" = ubpf_hash(&%s, sizeof(%s))", hashKeyInstanceName, hashKeyInstanceName);
+                builder->appendFormat(" = ubpf_hash(&%s, sizeof(%s))",
+                        hashKeyInstanceName, hashKeyInstanceName);
             } else {
                 ::error("%1%: Not supported hash algorithm type", algorithmType);
             }
 
             return;
         }
-
-        ::error("%1%: Not supported", function->method);
+        processCustomExternFunction(function, UBPFTypeFactory::instance);
     }
 
     void UBPFControlBodyTranslator::processChecksumReplace2(const P4::ExternFunction *function) {
@@ -149,7 +149,6 @@ namespace UBPF {
             }
         } else if (declType->name.name ==
                    UBPFModel::instance.registerModel.name) {
-
             cstring name = decl->getName().name;
             auto pRegister = control->getRegister(name);
 
@@ -250,7 +249,6 @@ namespace UBPF {
                 return false;
             }
         }
-        auto name = expression->path->name.name;
         builder->append(expression->path->name);  // each identifier should be unique
         return false;
     }
@@ -312,7 +310,6 @@ namespace UBPF {
     }
 
     bool UBPFControlBodyTranslator::preorder(const IR::AssignmentStatement *a) {
-
         if (a->right->is<IR::MethodCallExpression>()) {
             auto method = a->right->to<IR::MethodCallExpression>();
             if (method->method->is<IR::Member>()) {
@@ -331,7 +328,8 @@ namespace UBPF {
     bool
     UBPFControlBodyTranslator::emitRegisterRead(const IR::AssignmentStatement *a,
                                                 const IR::MethodCallExpression *method) {
-        auto registerName = method->method->to<IR::Member>()->expr->to<IR::PathExpression>()->path->name.name;
+        auto pathExpr = method->method->to<IR::Member>()->expr->to<IR::PathExpression>();
+        auto registerName = pathExpr->path->name.name;
         auto pRegister = control->getRegister(registerName);
         pRegister->emitKeyInstance(builder, method);
 
@@ -451,8 +449,9 @@ namespace UBPF {
                 BUG_CHECK(decl->is<IR::P4Action>(), "%1%: expected an action",
                           pe);
                 auto act = decl->to<IR::P4Action>();
-                auto table = control->getTable(mem->to<IR::Operation_Unary>()->expr->to<IR::Expression>()
-                        ->type->to<IR::Type_StructLike>()->getName().name);
+                auto tblName = mem->to<IR::Operation_Unary>()->expr->to<IR::Expression>()
+                        ->type->to<IR::Type_StructLike>()->getName().name;
+                auto table = control->getTable(tblName);
                 cstring name = table->generateActionName(act);
                 builder->append(name);
             }
@@ -463,7 +462,6 @@ namespace UBPF {
             builder->newline();
             builder->emitIndent();
             builder->appendLine("break;");
-
         }
         builder->blockEnd(false);
         saveAction.pop_back();
@@ -529,9 +527,10 @@ namespace UBPF {
 
     UBPFControl::UBPFControl(const UBPFProgram *program,
                              const IR::ControlBlock *block,
-                             const IR::Parameter *parserHeaders) :
-            program(program), controlBlock(block), headers(nullptr),
-            parserHeaders(parserHeaders), codeGen(nullptr) {}
+                             const IR::Parameter *parserHeaders) : EBPF::EBPFControl(program,
+                                     block, parserHeaders),
+                             program(program), controlBlock(block), headers(nullptr),
+                             parserHeaders(parserHeaders), codeGen(nullptr) {}
 
     void UBPFControl::scanConstants() {
         for (auto c : controlBlock->constantValue) {
@@ -627,4 +626,4 @@ namespace UBPF {
         return ::errorCount() == 0;
     }
 
-} // UBPF
+}  // namespace UBPF

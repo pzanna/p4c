@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> EthernetAddress;
@@ -33,10 +34,10 @@ control Eg(inout Headers hdrs, inout Metadata meta, inout standard_metadata_t st
         val.field1 = 32w8;
     }
     action test() {
-        Key inKey = { 32w1 };
-        Key defaultKey = { 32w0 };
+        Key inKey = (Key){field1 = 32w1};
+        Key defaultKey = (Key){field1 = 32w0};
         bool same = inKey == defaultKey;
-        Value val = { 32w0 };
+        Value val = (Value){field1 = 32w0};
         bool done = false;
         bool ok = !done && same;
         if (ok) {

@@ -1,8 +1,9 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 control c(inout bit<32> x, inout bit<32> y) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("c.a") action a(inout bit<32> b, inout bit<32> d) {
         log_msg("Logging message.");

@@ -26,6 +26,7 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "frontends/p4/typeChecking/bindVariables.h"
 #include "frontends/common/resolveReferences/resolveReferences.h"
+#include "frontends/p4/fromv1.0/v1model.h"
 // Passes
 #include "actionsInlining.h"
 #include "checkConstants.h"
@@ -53,6 +54,7 @@ limitations under the License.
 #include "simplifyDefUse.h"
 #include "simplifyParsers.h"
 #include "specialize.h"
+#include "specializeGenericFunctions.h"
 #include "strengthReduction.h"
 #include "structInitializers.h"
 #include "switchAddDefault.h"
@@ -126,6 +128,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
 
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
     std::initializer_list<Visitor *> frontendPasses = {
+        new P4V1::getV1ModelVersion,
         // Parse annotations
         new ParseAnnotationBodies(&parseAnnotations, &typeMap),
         new PrettyPrint(options),
@@ -150,6 +153,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new DefaultArguments(&refMap, &typeMap),  // add default argument values to parameters
         new BindTypeVariables(&refMap, &typeMap),
         new StructInitializers(&refMap, &typeMap),
+        new SpecializeGenericFunctions(&refMap, &typeMap),
         new TableKeyNames(&refMap, &typeMap),
         new PassRepeated({
             new ConstantFolding(&refMap, &typeMap),

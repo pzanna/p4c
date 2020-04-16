@@ -413,7 +413,7 @@ void ComputeWriteSet::enterScope(const IR::ParameterList* parameters,
             }
         }
     }
-    allDefinitions->setDefinitionsAt(entryPoint, defs);
+    allDefinitions->setDefinitionsAt(entryPoint, defs, false);
     currentDefinitions = defs;
     LOG3("Definitions at " << entryPoint << ":" << currentDefinitions);
 }
@@ -459,12 +459,17 @@ ProgramPoint ComputeWriteSet::getProgramPoint(const IR::Node* node) const {
 }
 
 // set the currentDefinitions after executing node
-bool ComputeWriteSet::setDefinitions(Definitions* defs, const IR::Node* node) {
+bool ComputeWriteSet::setDefinitions(Definitions* defs, const IR::Node* node, bool overwrite) {
     CHECK_NULL(defs);
     currentDefinitions = defs;
     auto point = getProgramPoint(node);
-    allDefinitions->setDefinitionsAt(point, currentDefinitions);
-    LOG3("Definitions at " << point << " are " << std::endl << defs);
+    // Since parsers allow revisiting states multiple times, we allow
+    // overwriting always in parser states.  In this case we actually expect
+    // that the definitions are monotonically increasing.
+    if (findContext<IR::ParserState>())
+        overwrite = true;
+    allDefinitions->setDefinitionsAt(point, currentDefinitions, overwrite);
+    LOG3("CWS Definitions at " << point << " are " << std::endl << defs);
     return false;  // always returns false
 }
 
@@ -659,24 +664,24 @@ bool ComputeWriteSet::preorder(const IR::MethodCallExpression* expression) {
     }
 
     // Symbolically call some apply methods (actions and tables)
-    std::vector<const IR::IDeclaration *> callee;
+    std::vector<const IR::IDeclaration *> callees;
     if (mi->is<ActionCall>()) {
         auto action = mi->to<ActionCall>()->action;
-        callee.push_back(action);
+        callees.push_back(action);
     } else if (mi->isApply()) {
         auto am = mi->to<ApplyMethod>();
         if (am->isTableApply()) {
             auto table = am->object->to<IR::P4Table>();
-            callee.push_back(table);
+            callees.push_back(table);
         }
     } else if (auto em = mi->to<ExternMethod>()) {
         // symbolically call all the methods that might be called via this extern method
-        callee = em->mayCall(); }
-    if (!callee.empty()) {
-        LOG3("Analyzing " << DBPrint::Brief << callee << DBPrint::Reset);
+        callees = em->mayCall(); }
+    if (!callees.empty()) {
+        LOG3("Analyzing callees of " << expression << DBPrint::Brief << callees << DBPrint::Reset);
         ProgramPoint pt(callingContext, expression);
         ComputeWriteSet cw(this, pt, currentDefinitions);
-        for (auto c : callee)
+        for (auto c : callees)
             (void)c->getNode()->apply(cw);
         currentDefinitions = cw.currentDefinitions;
         exitDefinitions = exitDefinitions->joinDefinitions(cw.exitDefinitions);
@@ -705,16 +710,24 @@ bool ComputeWriteSet::preorder(const IR::MethodCallExpression* expression) {
 //////////////////////////
 /// Statements and other control structures
 
+void ComputeWriteSet::visitVirtualMethods(const IR::IndexedVector<IR::Declaration> &locals) {
+    for (auto l : locals) {
+        if (auto li = l->to<IR::Declaration_Instance>()) {
+            if (li->initializer) {
+                virtualMethod = true;
+                // This is a blockStatement that contains all abstract method implementations
+                visit(li->initializer);
+                virtualMethod = false;
+            }}}
+}
+
 // Symbolic execution of the parser
 bool ComputeWriteSet::preorder(const IR::P4Parser* parser) {
     LOG3("CWS Visiting " << dbp(parser));
     auto startState = parser->getDeclByName(IR::ParserState::start)->to<IR::ParserState>();
     auto startPoint = ProgramPoint(startState);
     enterScope(parser->getApplyParameters(), &parser->parserLocals, startPoint);
-    for (auto l : parser->parserLocals) {
-        if (l->is<IR::Declaration_Instance>())
-            visit(l);  // process virtual Functions if any
-    }
+    visitVirtualMethods(parser->parserLocals);
 
     ParserCallGraph transitions("transitions");
     ComputeParserCG pcg(storageMap->refMap, &transitions);
@@ -744,7 +757,7 @@ bool ComputeWriteSet::preorder(const IR::P4Parser* parser) {
             auto newdefs = defs->joinDefinitions(after);
             if (!(*defs == *newdefs)) {
                 // Only run once more if there are any changes
-                setDefinitions(newdefs, n);
+                setDefinitions(newdefs, n, true);
                 toRun.emplace(n);
             }
         }
@@ -758,14 +771,11 @@ bool ComputeWriteSet::preorder(const IR::P4Control* control) {
     enterScope(control->getApplyParameters(), &control->controlLocals, startPoint);
     exitDefinitions = new Definitions();
     returnedDefinitions = new Definitions();
-    for (auto l : control->controlLocals) {
-        if (l->is<IR::Declaration_Instance>())
-            visit(l);  // process virtual Functions if any
-    }
+    visitVirtualMethods(control->controlLocals);
     visit(control->body);
     auto returned = currentDefinitions->joinDefinitions(returnedDefinitions);
     auto exited = returned->joinDefinitions(exitDefinitions);
-    return setDefinitions(exited, control->body);
+    return setDefinitions(exited, control->body, true);  // overwrite
 }
 
 bool ComputeWriteSet::preorder(const IR::IfStatement* statement) {
@@ -776,7 +786,7 @@ bool ComputeWriteSet::preorder(const IR::IfStatement* statement) {
     auto cond = getWrites(statement->condition);
     // defs are the definitions after evaluating the condition
     auto defs = currentDefinitions->writes(getProgramPoint(), cond);
-    (void)setDefinitions(defs, statement->condition);
+    (void)setDefinitions(defs, statement->condition, false);
     visit(statement->ifTrue);
     auto result = currentDefinitions;
     currentDefinitions = defs;
@@ -840,7 +850,7 @@ bool ComputeWriteSet::preorder(const IR::SwitchStatement* statement) {
     visit(statement->expression);
     auto locs = getWrites(statement->expression);
     auto defs = currentDefinitions->writes(getProgramPoint(statement->expression), locs);
-    (void)setDefinitions(defs, statement->expression);
+    (void)setDefinitions(defs, statement->expression, false);
     auto save = currentDefinitions;
     auto result = new Definitions();
     bool seenDefault = false;
@@ -878,7 +888,7 @@ bool ComputeWriteSet::preorder(const IR::P4Action* action) {
     enterScope(action->parameters, decls, pt, false);
     visit(action->body);
     currentDefinitions = currentDefinitions->joinDefinitions(returnedDefinitions);
-    setDefinitions(currentDefinitions, action->body);
+    setDefinitions(currentDefinitions, action->body, true);  // overwrite
     exitScope(action->parameters, decls);
     returnedDefinitions = saveReturned;
     return false;
@@ -887,7 +897,9 @@ bool ComputeWriteSet::preorder(const IR::P4Action* action) {
 namespace {
 class GetDeclarations : public Inspector {
     IR::IndexedVector<IR::Declaration> *declarations;
-    bool preorder(const IR::Declaration* declaration) override
+    bool preorder(const IR::Declaration_Variable* declaration) override
+    { declarations->push_back(declaration); return true; }
+    bool preorder(const IR::Declaration_Instance* declaration) override
     { declarations->push_back(declaration); return true; }
  public:
     GetDeclarations() : declarations(new IR::IndexedVector<IR::Declaration>())
@@ -901,21 +913,24 @@ class GetDeclarations : public Inspector {
 }  // namespace
 
 bool ComputeWriteSet::preorder(const IR::Function* function) {
-    LOG3("CWS Visiting " << dbp(function));
-    auto point = ProgramPoint(function);
+    if (virtualMethod) {
+        LOG3("Virtual method");
+        // We may not know where all virtual methods get called from; when
+        // this flag is true we are visiting the method without any context,
+        // as if it is a global function.
+        callingContext = ProgramPoint::beforeStart;
+    }
+    LOG3("CWS Visiting " << dbp(function) << " called from " << callingContext);
+    auto point = ProgramPoint(callingContext, function);
     auto locals = GetDeclarations::get(function->body);
     auto saveReturned = returnedDefinitions;
     enterScope(function->type->parameters, locals, point, false);
 
-    // The return value is uninitialized
-    auto uninit = new ProgramPoints(ProgramPoint::beforeStart);
-    auto retVal = allDefinitions->storageMap->addRetVal();
-    currentDefinitions->setDefinition(retVal, uninit);
-
     returnedDefinitions = new Definitions();
     visit(function->body);
     currentDefinitions = currentDefinitions->joinDefinitions(returnedDefinitions);
-    allDefinitions->setDefinitionsAt(callingContext, currentDefinitions);
+    LOG3("CWS @" << point.after() << "=" << currentDefinitions);
+    allDefinitions->setDefinitionsAt(point.after(), currentDefinitions, false);
     exitScope(function->type->parameters, locals);
 
     returnedDefinitions = saveReturned;
@@ -951,7 +966,7 @@ bool ComputeWriteSet::preorder(const IR::MethodCallStatement* statement) {
     visit(statement->methodCall);
     auto locs = getWrites(statement->methodCall);
     auto defs = currentDefinitions->writes(getProgramPoint(), locs);
-    return setDefinitions(defs);
+    return setDefinitions(defs, statement, true);  // overwrite
 }
 
 }  // namespace P4

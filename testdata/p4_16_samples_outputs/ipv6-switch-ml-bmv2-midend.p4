@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> mac_addr_t;
@@ -256,7 +257,7 @@ parser MyParser(packet_in packet, out headers hdr, inout metadata_t meta, inout 
 
 control ingress(inout headers hdr, inout metadata_t meta, inout standard_metadata_t standard_metadata) {
     bool key_0;
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("ingress.set_mcast_grp") action set_mcast_grp(bit<16> mcast_grp, bit<9> port) {
         standard_metadata.mcast_grp = mcast_grp;
@@ -290,7 +291,7 @@ control ingress(inout headers hdr, inout metadata_t meta, inout standard_metadat
 }
 
 control egress(inout headers hdr, inout metadata_t meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_1() {
+    @noWarn("unused") @name(".NoAction") action NoAction_1() {
     }
     @name("egress.set_out_bd") action set_out_bd(bit<24> bd) {
         meta._fwd_out_bd69 = bd;

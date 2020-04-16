@@ -41,7 +41,7 @@ StructTypeReplacement::StructTypeReplacement(
     replacementType = new IR::Type_Struct(type->name, IR::Annotations::empty, *vec);
 }
 
-const IR::StructInitializerExpression* StructTypeReplacement::explode(
+const IR::StructExpression* StructTypeReplacement::explode(
     const IR::Expression *root, cstring prefix) {
     auto vec = new IR::IndexedVector<IR::NamedExpression>();
     auto fieldType = ::get(structFieldMap, prefix);
@@ -58,10 +58,11 @@ const IR::StructInitializerExpression* StructTypeReplacement::explode(
         vec->push_back(new IR::NamedExpression(f->name, expr));
     }
     auto type = fieldType->getP4Type()->to<IR::Type_Name>();
-    return new IR::StructInitializerExpression(
+    return new IR::StructExpression(
         root->srcInfo, type, type, *vec);
 }
 
+namespace {
 static const IR::Type_Struct* isNestedStruct(const P4::TypeMap* typeMap, const IR::Type* type) {
     if (auto st = type->to<IR::Type_Struct>()) {
         for (auto f : st->fields) {
@@ -72,6 +73,7 @@ static const IR::Type_Struct* isNestedStruct(const P4::TypeMap* typeMap, const I
     }
     return nullptr;
 }
+}  // namespace
 
 void NestedStructMap::createReplacement(const IR::Type_Struct* type) {
     auto repl = ::get(replacement, type);

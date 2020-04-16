@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 struct headers_t {
@@ -22,7 +23,7 @@ control ingress(inout headers_t hdr, inout metadata_t meta, inout standard_metad
     @name(".send_to_cpu") action send_to_cpu() {
         standard_metadata.egress_spec = 9w64;
     }
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("ingress.t0") table t0_0 {
         key = {

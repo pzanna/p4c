@@ -131,7 +131,9 @@ const IR::Node* ActionsInliner::preorder(IR::MethodCallStatement* statement) {
     }
 
     auto annotations = callee->annotations->where(
-        [](const IR::Annotation* a) { return a->name != IR::Annotation::nameAnnotation; });
+        [&](const IR::Annotation* a) { return !(a->name == IR::Annotation::nameAnnotation ||
+                                                (a->name == IR::Annotation::noWarnAnnotation &&
+                                                 a->getSingleString() == "unused")); });
     auto result = new IR::BlockStatement(statement->srcInfo, annotations, body);
     LOG2("Replacing " << orig << " with " << result);
     return result;

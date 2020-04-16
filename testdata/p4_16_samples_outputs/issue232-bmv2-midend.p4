@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 struct Headers {
@@ -29,7 +30,6 @@ control Ing(inout Headers headers, inout Metadata meta, inout standard_metadata_
 control Eg(inout Headers hdrs, inout Metadata meta, inout standard_metadata_t standard_meta) {
     Value val_0;
     @name("Eg.test") action test() {
-        val_0.field1 = val_0.field1;
         val_0.field1 = val_0.field1;
     }
     @hidden table tbl_test {

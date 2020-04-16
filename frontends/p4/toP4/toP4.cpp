@@ -20,6 +20,7 @@ limitations under the License.
 #include "toP4.h"
 #include "frontends/common/options.h"
 #include "frontends/parsers/p4/p4parser.hpp"
+#include "frontends/p4/fromv1.0/v1model.h"
 
 namespace P4 {
 
@@ -165,15 +166,18 @@ bool ToP4::preorder(const IR::P4Program* program) {
              * we ignore mainFile and don't emit #includes for any non-system header */
 
             if (includesEmitted.find(sourceFile) == includesEmitted.end()) {
-                builder.append("#include ");
                 if (sourceFile.startsWith(p4includePath)) {
                     const char *p = sourceFile.c_str() + strlen(p4includePath);
                     if (*p == '/') p++;
-                    builder.append("<");
+                    if (P4V1::V1Model::instance.file.name == p) {
+                        std::stringstream buf;
+                        buf << "#define V1MODEL_VERSION " << P4V1::V1Model::instance.version;
+                        builder.appendLine(buf.str()); }
+                    builder.append("#include <");
                     builder.append(p);
                     builder.appendLine(">");
                 } else {
-                    builder.append("\"");
+                    builder.append("#include \"");
                     builder.append(sourceFile);
                     builder.appendLine("\"");
                 }
@@ -870,10 +874,13 @@ bool ToP4::preorder(const IR::NamedExpression* e) {
     return false;
 }
 
-bool ToP4::preorder(const IR::StructInitializerExpression* e) {
+bool ToP4::preorder(const IR::StructExpression* e) {
+    if (expressionPrecedence > DBPrint::Prec_Prefix)
+        builder.append("(");
     if (e->typeName != nullptr) {
+        builder.append("(");
         visit(e->typeName);
-        builder.append(" ");
+        builder.append(")");
     }
     builder.append("{");
     int prec = expressionPrecedence;
@@ -889,6 +896,8 @@ bool ToP4::preorder(const IR::StructInitializerExpression* e) {
     }
     expressionPrecedence = prec;
     builder.append("}");
+    if (expressionPrecedence > DBPrint::Prec_Prefix)
+        builder.append(")");
     return false;
 }
 
@@ -1126,15 +1135,17 @@ bool ToP4::preorder(const IR::SwitchStatement* s) {
 bool ToP4::preorder(const IR::Annotation * a) {
     builder.append("@");
     builder.append(a->name);
+    char open = a->structured ? '[' : '(';
+    char close = a->structured ? ']' : ')';
     if (!a->expr.empty()) {
-        builder.append("(");
+        builder.append(open);
         setVecSep(", ");
         preorder(&a->expr);
         doneVec();
-        builder.append(")");
+        builder.append(close);
     }
     if (!a->kv.empty()) {
-        builder.append("(");
+        builder.append(open);
         bool first = true;
         for (auto kvp : a->kv) {
             if (!first)
@@ -1144,13 +1155,16 @@ bool ToP4::preorder(const IR::Annotation * a) {
             builder.append("=");
             visit(kvp->expression);
         }
-        builder.append(")");
+        builder.append(close);
+    }
+    if (a->expr.empty() && a->kv.empty() && a->structured) {
+        builder.append("[]");
     }
     if (!a->body.empty() && a->expr.empty() && a->kv.empty()) {
         // Have an unparsed annotation.
         // We could be prettier here with smarter logic, but let's do the easy
         // thing by separating every token with a space.
-        builder.append("(");
+        builder.append(open);
         bool first = true;
         for (auto tok : a->body) {
             if (!first) builder.append(" ");
@@ -1162,7 +1176,7 @@ bool ToP4::preorder(const IR::Annotation * a) {
             builder.append(tok->text);
             if (haveStringLiteral) builder.append("\"");
         }
-        builder.append(")");
+        builder.append(close);
     }
     builder.spc();
     return false;

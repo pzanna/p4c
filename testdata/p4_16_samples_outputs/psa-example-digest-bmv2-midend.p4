@@ -82,11 +82,11 @@ parser EgressParserImpl(packet_in buffer, out headers parsed_hdr, inout metadata
 }
 
 control ingress(inout headers hdr, inout metadata meta, in psa_ingress_input_metadata_t istd, inout psa_ingress_output_metadata_t ostd) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name(".NoAction") action NoAction_4() {
+    @noWarn("unused") @name(".NoAction") action NoAction_4() {
     }
-    @name(".NoAction") action NoAction_5() {
+    @noWarn("unused") @name(".NoAction") action NoAction_5() {
     }
     @name("ingress.unknown_source") action unknown_source() {
         meta._send_mac_learn_msg0 = true;
@@ -104,14 +104,18 @@ control ingress(inout headers hdr, inout metadata meta, in psa_ingress_input_met
         default_action = unknown_source();
     }
     @name("ingress.do_L2_forward") action do_L2_forward(PortId_t egress_port) {
-        ostd.drop = false;
-        ostd.multicast_group = 32w0;
-        ostd.egress_port = egress_port;
+        @noWarnUnused {
+            ostd.drop = false;
+            ostd.multicast_group = 32w0;
+            ostd.egress_port = egress_port;
+        }
     }
     @name("ingress.do_tst") action do_tst(PortId_t egress_port, bit<16> serEnumT) {
-        ostd.drop = false;
-        ostd.multicast_group = 32w0;
-        ostd.egress_port = egress_port;
+        @noWarnUnused {
+            ostd.drop = false;
+            ostd.multicast_group = 32w0;
+            ostd.egress_port = egress_port;
+        }
     }
     @name("ingress.l2_tbl") table l2_tbl_0 {
         key = {
@@ -158,7 +162,7 @@ control egress(inout headers hdr, inout metadata meta, in psa_egress_input_metad
 control IngressDeparserImpl(packet_out packet, out empty_metadata_t clone_i2e_meta, out empty_metadata_t resubmit_meta, out empty_metadata_t normal_meta, inout headers hdr, in metadata meta, in psa_ingress_output_metadata_t istd) {
     @name("IngressDeparserImpl.mac_learn_digest") Digest<mac_learn_digest_t>() mac_learn_digest_0;
     @hidden action psaexampledigestbmv2l236() {
-        mac_learn_digest_0.pack(mac_learn_digest_t {srcAddr = meta._mac_learn_msg_srcAddr1,ingress_port = meta._mac_learn_msg_ingress_port2});
+        mac_learn_digest_0.pack((mac_learn_digest_t){srcAddr = meta._mac_learn_msg_srcAddr1,ingress_port = meta._mac_learn_msg_ingress_port2});
     }
     @hidden action psaexampledigestbmv2l218() {
         packet.emit<ethernet_t>(hdr.ethernet);

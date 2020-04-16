@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 header Ethernet {
@@ -24,7 +25,7 @@ parser prs(packet_in p, out Headers h) {
 }
 
 control c(inout Headers h, inout standard_metadata_t sm) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("c.do_act") action do_act(bit<32> type) {
         sm.instance_type = type;

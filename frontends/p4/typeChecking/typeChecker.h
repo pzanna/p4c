@@ -129,7 +129,7 @@ class TypeInference : public Transform {
     void checkCorelibMethods(const ExternMethod* em) const;
     void checkEmitType(const IR::Expression* emit, const IR::Type* type) const;
     bool containsHeader(const IR::Type* canonType);
-    void validateFields(const IR::Type* type,
+    bool validateFields(const IR::Type* type,
                         std::function<bool(const IR::Type*)> checker) const;
     const IR::Node* binaryBool(const IR::Operation_Binary* op);
     const IR::Node* binaryArith(const IR::Operation_Binary* op);
@@ -264,7 +264,7 @@ class TypeInference : public Transform {
     const IR::Node* postorder(IR::Member* expression) override;
     const IR::Node* postorder(IR::TypeNameExpression* expression) override;
     const IR::Node* postorder(IR::ListExpression* expression) override;
-    const IR::Node* postorder(IR::StructInitializerExpression* expression) override;
+    const IR::Node* postorder(IR::StructExpression* expression) override;
     const IR::Node* postorder(IR::MethodCallExpression* expression) override;
     const IR::Node* postorder(IR::ConstructorCallExpression* expression) override;
     const IR::Node* postorder(IR::SelectExpression* expression) override;
@@ -280,6 +280,7 @@ class TypeInference : public Transform {
     const IR::Node* postorder(IR::KeyElement* elem) override;
     const IR::Node* postorder(IR::Property* elem) override;
     const IR::Node* postorder(IR::SelectCase* elem) override;
+    const IR::Node* postorder(IR::Annotation* annotation) override;
 
     Visitor::profile_t init_apply(const IR::Node* node) override;
     void end_apply(const IR::Node* Node) override;

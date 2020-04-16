@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 header h_t {
@@ -46,7 +47,7 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
     @name("MyComputeChecksum.checksum") Checksum16() checksum_0;
     apply {
         h_0.setValid();
-        h_0 = { hdr.h.src, hdr.h.dst, 16w0 };
+        h_0 = (h_t){src = hdr.h.src,dst = hdr.h.dst,csum = 16w0};
         hdr.h.csum = checksum_0.get<h_t>(h_0);
     }
 }

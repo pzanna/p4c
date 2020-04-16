@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20200408
 #include <v1model.p4>
 
 struct intrinsic_metadata_t {
@@ -46,9 +47,9 @@ struct tuple_0 {
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name(".NoAction") action NoAction_3() {
+    @noWarn("unused") @name(".NoAction") action NoAction_3() {
     }
     @name("._nop") action _nop() {
     }
@@ -59,7 +60,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     }
     @name("._resubmit") action _resubmit() {
         meta._mymeta_f10 = 8w1;
-        resubmit<tuple_0>({ standard_metadata, mymeta_t {f1 = 8w1} });
+        resubmit<tuple_0>({ standard_metadata, (mymeta_t){f1 = 8w1} });
     }
     @name(".t_ingress_1") table t_ingress {
         actions = {

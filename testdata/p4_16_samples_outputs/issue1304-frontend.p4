@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 package Pipeline<H, M>(Parser<H, M> p, Ingress<H, M> ig, Egress<H, M> eg, Deparser<H> dp);
@@ -27,7 +28,7 @@ parser MyParser(packet_in b, out my_packet p, inout my_metadata m, inout standar
 }
 
 control MyIngress(inout my_packet p, inout my_metadata meta, inout standard_metadata_t s) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("MyIngress.set_data") action set_data() {
     }

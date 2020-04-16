@@ -32,6 +32,7 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "ir/ir.h"
 #include "lib/ordered_set.h"
+#include "typeSpecConverter.h"
 
 namespace P4 {
 
@@ -238,11 +239,19 @@ void forAllEvaluatedBlocks(const IR::Block* block, Func function) {
     }
 }
 
+/// Serialize an unstructured @annotation to a string.
 std::string serializeOneAnnotation(const IR::Annotation* annotation);
 
+/// Serialize a structured @annotation to the appropriate Protobuf message.
+void serializeOneStructuredAnnotation(
+    const IR::Annotation* annotation,
+    ::p4::config::v1::StructuredAnnotation* structuredAnnotation);
+
 /// Serialize @annotated's P4 annotations and attach them to a P4Info message
-/// with an 'annotations' field. '@name', '@id' and documentation annotations
-/// are ignored, as well as annotations whose name satisfies predicate @p.
+/// with an 'annotations' and a 'structured_annotations" field. All structured
+/// annotations are included. '@name', '@id' and documentation unstructured
+/// annotations are ignored, as well as annotations whose name satisfies
+/// predicate @p.
 template <typename Message, typename UnaryPredicate>
 void addAnnotations(Message* message, const IR::IAnnotated* annotated, UnaryPredicate p) {
     CHECK_NULL(message);
@@ -251,6 +260,11 @@ void addAnnotations(Message* message, const IR::IAnnotated* annotated, UnaryPred
     if (annotated == nullptr) return;
 
     for (const IR::Annotation* annotation : annotated->getAnnotations()->annotations) {
+        // Always add all structured annotations.
+        if (annotation->annotationKind() != IR::Annotation::Kind::Unstructured) {
+            serializeOneStructuredAnnotation(annotation, message->add_structured_annotations());
+            continue;
+        }
         // Don't output the @name or @id annotations; they're represented
         // elsewhere in P4Info messages.
         if (annotation->name == IR::Annotation::nameAnnotation) continue;
@@ -357,13 +371,19 @@ struct Counterlike {
     const int64_t size;
     /// If not none, the instance is a direct resource associated with @table.
     const boost::optional<cstring> table;
+    /// If the type of the index is a user-defined type, this is the name of the type. Otherwise it
+    /// is nullptr.
+    const cstring index_type_name;
 
     /// @return the information required to serialize an explicit @instance of
     /// @Kind, which is defined inside a control block.
     static boost::optional<Counterlike<Kind>>
-    from(const IR::ExternBlock* instance) {
+    from(const IR::ExternBlock* instance,
+         const ReferenceMap* refMap,
+         const P4::TypeMap* typeMap,
+         ::p4::config::v1::P4TypeInfo* p4RtTypeInfo) {
         CHECK_NULL(instance);
-        auto declaration = instance->node->to<IR::IDeclaration>();
+        auto declaration = instance->node->to<IR::Declaration_Instance>();
 
         // Counter and meter externs refer to their unit as a "type"; this is
         // (confusingly) unrelated to the "type" field of a counter or meter in
@@ -382,11 +402,30 @@ struct Counterlike {
             return boost::none;
         }
 
+        cstring index_type_name = nullptr;
+        auto indexTypeParamIdx = CounterlikeTraits<Kind>::indexTypeParamIdx();
+        // In v1model, the index is a bit<32>, in PSA it is determined by a type parameter.
+        if (indexTypeParamIdx != boost::none) {
+            // retrieve type parameter for the index.
+            BUG_CHECK(declaration->type->is<IR::Type_Specialized>(),
+                      "%1%: expected Type_Specialized", declaration->type);
+            auto type = declaration->type->to<IR::Type_Specialized>();
+            BUG_CHECK(type->arguments->size() > *indexTypeParamIdx,
+                      "%1%: expected at least %2% type arguments",
+                      instance, *indexTypeParamIdx + 1);
+            auto typeArg = type->arguments->at(*indexTypeParamIdx);
+            // We ignore the return type on purpose, but the call is required to update p4RtTypeInfo
+            // if the index has a user-defined type.
+            TypeSpecConverter::convert(refMap, typeMap, typeArg, p4RtTypeInfo);
+            index_type_name = getTypeName(typeArg, typeMap);
+        }
+
         return Counterlike<Kind>{declaration->controlPlaneName(),
                                  declaration->to<IR::IAnnotated>(),
                                  unit->to<IR::Declaration_ID>()->name,
                                  int(size->template to<IR::Constant>()->value),
-                                 boost::none};
+                                 boost::none,
+                                 index_type_name};
     }
 
     /// @return the information required to serialize an @instance of @Kind which
@@ -419,7 +458,8 @@ struct Counterlike {
         auto unit = unitArgument->to<IR::Member>()->member.name;
         return Counterlike<Kind>{*instance.name, instance.annotations,
                                  unit, Helpers::getTableSize(table),
-                                 table->controlPlaneName()};
+                                 table->controlPlaneName(),
+                                 ""};
     }
 };
 

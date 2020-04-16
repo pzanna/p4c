@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> EthernetAddress;
@@ -74,16 +75,10 @@ control Ing(inout Headers headers, inout Metadata meta, inout standard_metadata_
 }
 
 control Eg(inout Headers hdrs, inout Metadata meta, inout standard_metadata_t standard_meta) {
-    bit<32> tmp;
-    bit<32> tmp_0;
     @name("Eg.test") action test() {
-        tmp = tmp;
-        tmp = 32w0;
-        tmp_0 = tmp_0;
-        tmp_0 = 32w0;
-        debug.write(32w0, tmp_0);
-        debug.write(32w1, tmp);
-        debug.write(32w2, tmp);
+        debug.write(32w0, 32w0);
+        debug.write(32w1, 32w0);
+        debug.write(32w2, 32w0);
         reg.write(32w0, 32w1);
     }
     @hidden table tbl_test {

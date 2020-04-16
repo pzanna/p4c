@@ -151,6 +151,14 @@ const p4configv1::Digest* findDigest(const P4::P4RuntimeAPI& analysis,
     return findP4InfoObject(digests.begin(), digests.end(), name);
 }
 
+/// @return the P4Runtime representation of the "controller header" with the
+/// given name, or null if none is found.
+const p4configv1::ControllerPacketMetadata* findControllerHeader(const P4::P4RuntimeAPI& analysis,
+                                                                 const std::string& name) {
+    auto& headers = analysis.p4Info->controller_packet_metadata();
+    return findP4InfoObject(headers.begin(), headers.end(), name);
+}
+
 }  // namespace
 
 class P4Runtime : public P4CTest { };
@@ -189,6 +197,18 @@ TEST_F(P4Runtime, IdAssignment) {
                 default_action = noop;
             }
 
+            @id(0xffffff)
+            table igTableWithLargestId {
+                actions = { noop; }
+                default_action = noop;
+            }
+
+            @id(0x02000133)
+            table igTableWithPrefixedId {
+                actions = { noop; }
+                default_action = noop;
+            }
+
             @id(5678)
             @name("igTableWithNameAndId")
             table igTableWithoutNameAndId {
@@ -196,14 +216,20 @@ TEST_F(P4Runtime, IdAssignment) {
                 default_action = noop;
             }
 
-            @id(4321)
+            @id(0x02000134)
             table conflictingTableA {
                 actions = { noop; }
                 default_action = noop;
             }
 
-            @id(4321)
+            @id(0x02000134)
             table conflictingTableB {
+                actions = { noop; }
+                default_action = noop;
+            }
+
+            @id(0x03000133)
+            table igTableWithIdInvalidPrefix {
                 actions = { noop; }
                 default_action = noop;
             }
@@ -212,9 +238,12 @@ TEST_F(P4Runtime, IdAssignment) {
                 igTable.apply();
                 igTableWithoutName.apply();
                 igTableWithId.apply();
+                igTableWithLargestId.apply();
+                igTableWithPrefixedId.apply();
                 igTableWithoutNameAndId.apply();
                 conflictingTableA.apply();
                 conflictingTableB.apply();
+                igTableWithIdInvalidPrefix.apply();
             }
         }
 
@@ -224,9 +253,10 @@ TEST_F(P4Runtime, IdAssignment) {
 
     ASSERT_TRUE(test);
 
-    // We expect exactly one error:
-    //   error: @id 4321 is assigned to multiple declarations
-    EXPECT_EQ(1u, ::diagnosticCount());
+    // We expect exactly two errors:
+    //   error: @id 33554740 is assigned to multiple declarations
+    //   error: ingress.igTableWithIdInvalidPrefix: @id has the wrong 8-bit prefix
+    EXPECT_EQ(2u, ::diagnosticCount());
 
     {
         // Check that 'igTable' ended up in the P4Info output.
@@ -239,7 +269,7 @@ TEST_F(P4Runtime, IdAssignment) {
         // Check that the rest of the id matches the hash value that we expect.
         // (If we were to ever change the hash algorithm we use when mapping P4
         // names to P4Runtime ids, we'd need to change this test.)
-        EXPECT_EQ(16119u, igTable->preamble().id() & 0x00ffffff);
+        EXPECT_EQ(14761719u, igTable->preamble().id() & 0x00ffffff);
     }
 
     {
@@ -253,15 +283,34 @@ TEST_F(P4Runtime, IdAssignment) {
         // Check that the id of 'igTableWithName' was computed based on its
         // @name annotation. (See above for caveat re: the hash algorithm.)
         EXPECT_EQ(unsigned(P4Ids::TABLE), igTableWithName->preamble().id() >> 24);
-        EXPECT_EQ(59806u, igTableWithName->preamble().id() & 0x00ffffff);
+        EXPECT_EQ(1108382u, igTableWithName->preamble().id() & 0x00ffffff);
     }
 
     {
         // Check that 'igTableWithId' ended up in the P4Info output, and that
-        // its id matches the one set by its @id annotation.
+        // its id matches the one set by its @id annotation, with the required
+        // 8-bit type prefix (which is 0x2 for tables).
         auto* igTableWithId = findTable(*test, "ingress.igTableWithId");
         ASSERT_TRUE(igTableWithId != nullptr);
-        EXPECT_EQ(1234u, igTableWithId->preamble().id());
+        auto expectedId = 1234u | (unsigned(P4Ids::TABLE) << 24);
+        EXPECT_EQ(expectedId, igTableWithId->preamble().id());
+    }
+
+    {
+        // Same as above, but with the largest possible id (0xffffff).
+        auto* igTableWithLargestId = findTable(*test, "ingress.igTableWithLargestId");
+        ASSERT_TRUE(igTableWithLargestId != nullptr);
+        auto expectedId = 0xffffffu | (unsigned(P4Ids::TABLE) << 24);
+        EXPECT_EQ(expectedId, igTableWithLargestId->preamble().id());
+    }
+
+    {
+        // Check that 'igTableWithPrefixedId' ended up in the P4Info output, and
+        // that its id matches the one set by its @id annotation.
+        auto* igTableWithPrefixedId = findTable(*test, "ingress.igTableWithPrefixedId");
+        ASSERT_TRUE(igTableWithPrefixedId != nullptr);
+        auto expectedId = 0x02000133u;
+        EXPECT_EQ(expectedId, igTableWithPrefixedId->preamble().id());
     }
 
     {
@@ -271,7 +320,8 @@ TEST_F(P4Runtime, IdAssignment) {
         EXPECT_TRUE(findTable(*test, "ingress.igTableWithoutNameAndId") == nullptr);
         auto* igTableWithNameAndId = findTable(*test, "ingress.igTableWithNameAndId");
         ASSERT_TRUE(igTableWithNameAndId != nullptr);
-        EXPECT_EQ(5678u, igTableWithNameAndId->preamble().id());
+        auto expectedId = 5678u | (unsigned(P4Ids::TABLE) << 24);
+        EXPECT_EQ(expectedId, igTableWithNameAndId->preamble().id());
     }
 
     {
@@ -281,10 +331,159 @@ TEST_F(P4Runtime, IdAssignment) {
         ASSERT_TRUE(conflictingTableA != nullptr);
         auto* conflictingTableB = findTable(*test, "ingress.conflictingTableB");
         ASSERT_TRUE(conflictingTableB != nullptr);
-        EXPECT_TRUE(conflictingTableA->preamble().id() == 4321 ||
-                    conflictingTableB->preamble().id() == 4321);
+        EXPECT_TRUE(conflictingTableA->preamble().id() == 0x02000134 ||
+                    conflictingTableB->preamble().id() == 0x02000134);
         EXPECT_NE(conflictingTableA->preamble().id(),
                   conflictingTableB->preamble().id());
+    }
+}
+
+TEST_F(P4Runtime, FieldIdAssignment) {
+    auto test = createP4RuntimeTestCase(P4_SOURCE(P4Headers::V1MODEL, R"(
+        @controller_header("packet_in")
+        header Header { bit<32> f1; @id(1) bit<32> f2; }
+        struct Headers { Header hdr; }
+        struct Metadata { bit<32> f1; bit<32> f2; bit<32> f3; }
+        struct pvs_t {
+            @id(33) bit<32> f1;
+            bit<32> f2;
+        }
+
+        parser parse(packet_in p, out Headers h, inout Metadata m,
+                     inout standard_metadata_t sm) {
+            value_set<pvs_t>(16) pvs;
+            state start {
+                p.extract(h.hdr);
+                transition select(h.hdr.f1, h.hdr.f2) {
+                    pvs: accept;
+                    default: reject; } } }
+
+        control verifyChecksum(inout Headers h, inout Metadata m) { apply { } }
+        control egress(inout Headers h, inout Metadata m,
+                        inout standard_metadata_t sm) { apply { } }
+        control computeChecksum(inout Headers h, inout Metadata m) { apply { } }
+        control deparse(packet_out p, in Headers h) { apply { } }
+
+        control ingress(inout Headers h, inout Metadata m,
+                        inout standard_metadata_t sm) {
+            action a(@id(99) bit<32> p1, bit<32> p2) {
+                m.f1 = p1;
+                m.f2 = p2;
+            }
+
+            @name("igTable")
+            table t1 {
+                key = {
+                    m.f1: exact @id(99);
+                    m.f2: exact;
+                }
+                actions = { a; }
+            }
+
+            @name("igTableInvalid")
+            table t2 {
+                key = {
+                    m.f1: exact @id(99);
+                    m.f2: exact @id(99);
+                    m.f3: exact @id(0);
+                }
+                actions = { NoAction; }
+            }
+
+            @name("igTableNoAnno")
+            table t3 {
+                key = {
+                    m.f1: exact;
+                    m.f2: exact;
+                }
+                actions = { a; }
+            }
+
+            @name("igTableLargeId")
+            table t4 {
+                key = {
+                    m.f1: exact @id(0xffffffff);
+                }
+                actions = { a; }
+            }
+
+            apply {
+                t1.apply();
+                t2.apply();
+                t3.apply();
+                t4.apply();
+            }
+        }
+
+        V1Switch(parse(), verifyChecksum(), ingress(), egress(),
+                 computeChecksum(), deparse()) main;
+    )"));
+
+    ASSERT_TRUE(test);
+
+    // We expect exactly two errors:
+    //   error: KeyElement: @id 99 is used multiple times
+    //   error: KeyElement: 0 is not a valid @id value
+    EXPECT_EQ(2u, ::diagnosticCount());
+
+    {
+        // Check the ids for igTable's match fields.
+        auto* igTable = findTable(*test, "ingress.igTable");
+        ASSERT_TRUE(igTable != nullptr);
+        const auto& mf1 = igTable->match_fields(0);
+        const auto& mf2 = igTable->match_fields(1);
+        EXPECT_EQ(99u, mf1.id());
+        EXPECT_NE(99u, mf2.id());
+    }
+
+    {
+        // Check the ids for action a's parameters.
+        auto* aAction = findAction(*test, "ingress.a");
+        ASSERT_TRUE(aAction != nullptr);
+        const auto& ap1 = aAction->params(0);
+        const auto& ap2 = aAction->params(1);
+        EXPECT_EQ(99u, ap1.id());
+        EXPECT_NE(99u, ap2.id());
+    }
+
+    {
+        // Check the ids for the packet-in header fields.
+        auto* packetInHeader = findControllerHeader(*test, "packet_in");
+        ASSERT_TRUE(packetInHeader != nullptr);
+        const auto& m1 = packetInHeader->metadata(0);
+        const auto& m2 = packetInHeader->metadata(1);
+        EXPECT_NE(1u, m1.id());
+        EXPECT_EQ(1u, m2.id());
+    }
+
+    {
+        // Check the ids for igTableNoAnno's match fields. Without @id
+        // annotations, the ids should be assigned sequentially, starting at 1.
+        auto* igTable = findTable(*test, "ingress.igTableNoAnno");
+        ASSERT_TRUE(igTable != nullptr);
+        const auto& mf1 = igTable->match_fields(0);
+        const auto& mf2 = igTable->match_fields(1);
+        EXPECT_EQ(1u, mf1.id());
+        EXPECT_EQ(2u, mf2.id());
+    }
+
+    {
+        // Check the ids for igTableLargeId's match fields. The compiler should
+        // be able to handle all unsigned 32-bit integers greater than 0,
+        // including 0xffffffff.
+        auto* igTable = findTable(*test, "ingress.igTableLargeId");
+        ASSERT_TRUE(igTable != nullptr);
+        const auto& mf1 = igTable->match_fields(0);
+        EXPECT_EQ(0xffffffff, mf1.id());
+    }
+
+    {
+        auto vset = findValueSet(*test, "parse.pvs");
+        ASSERT_TRUE(vset != nullptr);
+        const auto& mf1 = vset->match(0);
+        const auto& mf2 = vset->match(1);
+        EXPECT_EQ(33u, mf1.id());
+        EXPECT_NE(33u, mf2.id());
     }
 }
 
@@ -323,12 +522,12 @@ TEST_F(P4Runtime, IdAssignmentCounters) {
             }
 
             @name(".myCounter")
-            counter(32w1024, CounterType.packets) myCounter;
+            counter<bit<10>>(32w1024, CounterType.packets) myCounter;
 
             apply {
                 myTable1.apply();
                 myTable2.apply();
-                myCounter.count(32w128);
+                myCounter.count(128);
             }
         }
 
@@ -1162,11 +1361,11 @@ TEST_F(P4Runtime, Register) {
         control ingress(inout Headers h, inout Metadata m,
                         inout standard_metadata_t sm) {
             @my_anno("This is an annotation!")
-            register<tuple<bit<16>, bit<8> > >(128) my_register_1;
-            register<Header>(128) my_register_2;
+            register<tuple<bit<16>, bit<8> >, bit<7>>(128) my_register_1;
+            register<Header, bit<7>>(128) my_register_2;
             apply {
-                my_register_1.write(32w10, {16w1, 8w2});
-                my_register_2.write(32w10, h.h); } }
+                my_register_1.write(7w10, {16w1, 8w2});
+                my_register_2.write(7w10, h.h); } }
         V1Switch(parse(), verifyChecksum(), ingress(), egress(),
                  computeChecksum(), deparse()) main;
     )"), ParseAnnotations());
@@ -1336,44 +1535,6 @@ TEST_F(P4RuntimePkgInfo, ValueNotAString) {
     EXPECT_EQ(pkgInfo.name(), "");
 }
 
-TEST_F(P4Runtime, P4_16_MatchFieldsSize) {
-    auto test = createP4RuntimeTestCase(P4_SOURCE(P4Headers::V1MODEL, R"(
-    @p4runtime_translation("mycompany.com/My_Byte2", 0xffffffff)
-    type bit<8> CustomT_t;
-    header Header { CustomT_t headerField; }
-    struct Headers { Header h; }
-    struct Metadata { bit<33> metadataField; }
-    parser parse(packet_in p, out Headers h, inout Metadata m,
-                 inout standard_metadata_t sm) {
-        state start { transition accept; } }
-    control verifyChecksum(inout Headers h, inout Metadata m) { apply { } }
-    control egress(inout Headers h, inout Metadata m,
-                   inout standard_metadata_t sm) { apply { } }
-    control computeChecksum(inout Headers h, inout Metadata m) { apply { } }
-    control deparse(packet_out p, in Headers h) { apply { } }
-    control ingress(inout Headers h, inout Metadata m,
-                    inout standard_metadata_t sm) {
-        action noop() { }
-
-        table igTable {
-            key = {
-                h.h.headerField : exact;
-            }
-            actions = { noop; }
-        }
-
-        apply {
-            igTable.apply();
-        }
-    }
-    V1Switch(parse(), verifyChecksum(), ingress(), egress(),
-            computeChecksum(), deparse()) main;
-    )"));
-
-    ASSERT_TRUE(test);
-    EXPECT_EQ(1u, ::diagnosticCount());
-}
-
 TEST_F(P4RuntimePkgInfo, DuplicateKey) {
     auto test = createTestCase(R"(@pkginfo(name="aaa", name="bbb"))");
     // kv annotations use an IndexedVector, which does not allow duplicate keys.
@@ -1400,6 +1561,79 @@ TEST_F(P4RuntimePkgInfo, UnknownAnnotations) {
     EXPECT_EQ(annotations.Get(3), "@my_annotation_4(\"test\")");
 }
 
+TEST_F(P4RuntimePkgInfo, UnknownStructuredAnnotations) {
+    auto test = createTestCase(R"(
+        @my_annotation_1[]
+        @my_annotation_2[1,"hello",true,1==2,5+6]
+        @my_annotation_3[label="text", my_bool=true, int_val=2*3])");
+    ASSERT_TRUE(test);
+    EXPECT_EQ(0u, ::diagnosticCount());
+    const auto& pkgInfo = test->p4Info->pkg_info();
+    const auto& annotations = pkgInfo.structured_annotations();
+    ASSERT_EQ(annotations.size(), 3);
+    // P4 order is preserved when building the IR and generating P4Info
+    {
+        const auto& annotation = annotations.Get(0);
+        EXPECT_EQ(annotation.name(), "my_annotation_1");
+        EXPECT_EQ(annotation.body_case(), p4configv1::StructuredAnnotation::BODY_NOT_SET);
+    }
+    {
+        const auto& annotation = annotations.Get(1);
+        EXPECT_EQ(annotation.name(), "my_annotation_2");
+        const auto& expressions = annotation.expression_list().expressions();
+        ASSERT_EQ(expressions.size(), 5);
+        EXPECT_EQ(expressions.Get(0).int64_value(), 1);
+        EXPECT_EQ(expressions.Get(1).string_value(), "hello");
+        EXPECT_EQ(expressions.Get(2).bool_value(), true);
+        EXPECT_EQ(expressions.Get(3).bool_value(), false);
+        EXPECT_EQ(expressions.Get(4).int64_value(), 11);
+    }
+    {
+        const auto& annotation = annotations.Get(2);
+        EXPECT_EQ(annotation.name(), "my_annotation_3");
+        const auto& kvpairs = annotation.kv_pair_list().kv_pairs();
+        ASSERT_EQ(kvpairs.size(), 3);
+        {
+            const auto& kvpair = kvpairs.Get(0);
+            EXPECT_EQ(kvpair.key(), "label");
+            EXPECT_EQ(kvpair.value().string_value(), "text");
+        }
+        {
+            const auto& kvpair = kvpairs.Get(1);
+            EXPECT_EQ(kvpair.key(), "my_bool");
+            EXPECT_EQ(kvpair.value().bool_value(), true);
+        }
+        {
+            const auto& kvpair = kvpairs.Get(2);
+            EXPECT_EQ(kvpair.key(), "int_val");
+            EXPECT_EQ(kvpair.value().int64_value(), 6);
+        }
+    }
+}
+
+TEST_F(P4RuntimePkgInfo, StructuredAnnotationDuplicate) {
+    auto test = createTestCase(R"(
+        @my_annotation_1[]
+        @my_annotation_1[1])");
+    // error is in p4c frontend
+    ASSERT_FALSE(test);
+}
+
+TEST_F(P4RuntimePkgInfo, StructuredAnnotationDuplicateKey) {
+    auto test = createTestCase(R"(
+        @my_annotation_1[foo=bar,foo=barAgain])");
+    // error is in p4c frontend
+    ASSERT_FALSE(test);
+}
+
+TEST_F(P4RuntimePkgInfo, StructuredAnnotationLargeInt) {
+    auto test = createTestCase(R"(
+        @my_annotation_1[foo=6666666666666666666666666666666])");
+    // error is in P4Info serializer
+    ASSERT_TRUE(test);
+    EXPECT_EQ(1u, ::diagnosticCount());
+}
+
 
 class P4RuntimeDataTypeSpec : public P4Runtime {
  protected:
@@ -1407,6 +1641,10 @@ class P4RuntimeDataTypeSpec : public P4Runtime {
         auto pgm = P4::parseP4String(programStr, CompilerOptions::FrontendVersion::P4_16);
         if (pgm == nullptr) return nullptr;
         PassManager  passes({
+            new P4::ParseAnnotations("P4RuntimeDataTypeSpecTest", false, {
+                // @p4runtime_translation has two args
+                PARSE_PAIR("p4runtime_translation", Expression),
+            }),
             new P4::ResolveReferences(&refMap),
             new P4::TypeInference(&refMap, &typeMap, false)
         });
@@ -1730,13 +1968,91 @@ TEST_F(P4RuntimeDataTypeSpec, StructWithTypedef) {
     ASSERT_EQ(2, it->second.members_size());
     auto check_member = [&](cstring name, int index) {
       EXPECT_EQ(name, it->second.members(index).name());
-      const auto &memberTypeSpec = it->second.members(0).type_spec();
+      const auto &memberTypeSpec = it->second.members(index).type_spec();
       ASSERT_TRUE(memberTypeSpec.has_bitstring());
       ASSERT_TRUE(memberTypeSpec.bitstring().has_bit());
       EXPECT_EQ(8, memberTypeSpec.bitstring().bit().bitwidth());
     };
     check_member("f", 0);
     check_member("f2", 1);
+}
+
+TEST_F(P4RuntimeDataTypeSpec, NewType) {
+    std::string program = P4_SOURCE(R"(
+        type bit<8> my_type_t;
+        @p4runtime_translation("p4.org/myArch/v1/Type2", 32)
+        type bit<8> my_type2_t;
+        struct my_struct { my_type_t f; my_type2_t f2; }
+        extern my_extern_t<T> { my_extern_t(bit<32> v); }
+        my_extern_t<my_struct>(32w1024) my_extern;
+    )");
+    auto pgm = getProgram(program);
+    ASSERT_TRUE(pgm != nullptr && ::errorCount() == 0);
+
+    auto type = findExternTypeParameterName<IR::Type_Name>(pgm, "my_extern_t");
+    ASSERT_TRUE(type != nullptr);
+    auto typeSpec = P4::ControlPlaneAPI::TypeSpecConverter::convert(
+        &refMap, &typeMap, type, &typeInfo);
+    ASSERT_TRUE(typeSpec->has_struct_());
+    EXPECT_EQ("my_struct", typeSpec->struct_().name());
+
+    auto it = typeInfo.structs().find("my_struct");
+    ASSERT_TRUE(it != typeInfo.structs().end());
+    ASSERT_EQ(2, it->second.members_size());
+
+    auto check_member = [&](cstring memberName, int index, cstring newTypeName) {
+      EXPECT_EQ(memberName, it->second.members(index).name());
+      const auto &memberTypeSpec = it->second.members(index).type_spec();
+      ASSERT_TRUE(memberTypeSpec.has_new_type());
+      EXPECT_EQ(newTypeName, memberTypeSpec.new_type().name());
+    };
+    check_member("f", 0, "my_type_t");
+    check_member("f2", 1, "my_type2_t");
+
+    // non-translated
+    {
+        auto it = typeInfo.new_types().find("my_type_t");
+        ASSERT_TRUE(it != typeInfo.new_types().end());
+        ASSERT_TRUE(it->second.has_original_type());
+        const auto &typeSpec = it->second.original_type();
+        ASSERT_TRUE(typeSpec.has_bitstring());
+        EXPECT_EQ(8, typeSpec.bitstring().bit().bitwidth());
+    }
+
+    // translated
+    {
+        auto it = typeInfo.new_types().find("my_type2_t");
+        ASSERT_TRUE(it != typeInfo.new_types().end());
+        ASSERT_TRUE(it->second.has_translated_type());
+        const auto &translatedType = it->second.translated_type();
+        EXPECT_EQ("p4.org/myArch/v1/Type2", translatedType.uri());
+        EXPECT_EQ(32, translatedType.sdn_bitwidth());
+    }
+}
+
+TEST_F(P4RuntimeDataTypeSpec, NewTypeInvalidTranslation) {
+    std::string program = P4_SOURCE(R"(
+        @p4runtime_translation("p4.org/myArch/v1/Type", 0xffffffff)
+        type bit<8> my_type_t;
+        @p4runtime_translation("p4.org/myArch/v1/Type2", -1)
+        type bit<8> my_type2_t;
+        @p4runtime_translation(1, 32)
+        type bit<8> my_type3_t;
+        @p4runtime_translation("p4.org/myArch/v1/Type4", 32)
+        type bool my_type4_t;
+        struct my_struct { my_type_t f; my_type2_t f2; my_type3_t f3; my_type4_t f4; }
+        extern my_extern_t<T> { my_extern_t(bit<32> v); }
+        my_extern_t<my_struct>(32w1024) my_extern;
+    )");
+    auto pgm = getProgram(program);
+    ASSERT_TRUE(pgm != nullptr && ::errorCount() == 0);
+
+    auto type = findExternTypeParameterName<IR::Type_Name>(pgm, "my_extern_t");
+    ASSERT_TRUE(type != nullptr);
+    P4::ControlPlaneAPI::TypeSpecConverter::convert(
+        &refMap, &typeMap, type, &typeInfo);
+    // expect 4 errors, one for each invalid @p4runtime_translation annotation above.
+    EXPECT_EQ(4u, ::errorCount());
 }
 
 }  // namespace Test

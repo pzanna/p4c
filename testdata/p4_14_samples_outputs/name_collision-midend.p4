@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20200408
 #include <v1model.p4>
 
 struct B {
@@ -34,10 +35,10 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     }
 }
 
-@name(".B") counter(32w1024, CounterType.packets_and_bytes) B_1;
+@name(".B") counter<bit<10>>(32w1024, CounterType.packets_and_bytes) B_1;
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name(".A") action A_2(bit<8> val, bit<9> port, bit<10> idx) {
         hdr.A.b1 = val;
@@ -47,7 +48,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     @name(".noop") action noop() {
     }
     @name(".B") action B_2() {
-        B_1.count((bit<32>)meta._meta_B1);
+        B_1.count(meta._meta_B1);
     }
     @name(".A") table A_3 {
         actions = {

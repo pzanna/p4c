@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<48> EthernetAddressUint_t;
@@ -122,7 +123,7 @@ control ingress(inout headers_t hdr, inout meta_t meta, inout standard_metadata_
         standard_metadata.parser_error = smeta_1.parser_error;
         standard_metadata.priority = smeta_1.priority;
     }
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("ingress.set_output") action set_output(bit<9> out_port) {
         standard_metadata.egress_spec = out_port;

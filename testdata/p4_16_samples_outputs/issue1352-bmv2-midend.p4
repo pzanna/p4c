@@ -2,6 +2,7 @@ error {
     UnreachableState
 }
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<9> egressSpec_t;
@@ -61,9 +62,9 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 }
 
 control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name(".NoAction") action NoAction_1() {
+    @noWarn("unused") @name(".NoAction") action NoAction_1() {
     }
     @name("MyIngress.drop") action drop() {
         mark_to_drop(standard_metadata);
@@ -104,7 +105,7 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
     }
     @name("MyIngress.send_digest") action send_digest() {
         meta._test_digest_in_mac_srcAddr0 = hdr.ethernet.srcAddr;
-        digest<test_digest_t>(32w1, test_digest_t {in_mac_srcAddr = hdr.ethernet.srcAddr});
+        digest<test_digest_t>(32w1, (test_digest_t){in_mac_srcAddr = hdr.ethernet.srcAddr});
     }
     @hidden table tbl_send_digest {
         actions = {
@@ -120,7 +121,7 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 }
 
 control MyEgress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_5() {
+    @noWarn("unused") @name(".NoAction") action NoAction_5() {
     }
     @name("MyEgress.rewrite_mac") action rewrite_mac(macAddr_t srcAddr) {
         hdr.ethernet.srcAddr = srcAddr;

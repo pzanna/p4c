@@ -26,7 +26,7 @@ const IR::Node* HierarchicalNames::postorder(IR::Annotation* annotation) {
     if (annotation->name != IR::Annotation::nameAnnotation)
         return annotation;
 
-    cstring name = IR::Annotation::getName(annotation);
+    cstring name = annotation->getName();
     if (name.startsWith("."))
         return annotation;
     cstring newName = "";
@@ -34,7 +34,7 @@ const IR::Node* HierarchicalNames::postorder(IR::Annotation* annotation) {
         newName += s + ".";
     newName += name;
     LOG2("Changing " << name << " to " << newName);
-    annotation = new IR::Annotation(annotation->name, { new IR::StringLiteral(newName) });
+    annotation = new IR::Annotation(annotation->name, newName);
     return annotation;
 }
 

@@ -2,6 +2,7 @@ error {
     UnreachableState
 }
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 typedef bit<9> egressSpec_t;
@@ -85,9 +86,9 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 }
 
 control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name(".NoAction") action NoAction_1() {
+    @noWarn("unused") @name(".NoAction") action NoAction_1() {
     }
     @name("MyIngress.set_dmac") action set_dmac(macAddr_t dstAddr) {
         hdr.ethernet.dstAddr = dstAddr;
@@ -143,7 +144,7 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 }
 
 control MyEgress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_5() {
+    @noWarn("unused") @name(".NoAction") action NoAction_5() {
     }
     @name("MyEgress.rewrite_mac") action rewrite_mac(macAddr_t srcAddr) {
         hdr.ethernet.srcAddr = srcAddr;

@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20200408
 #include <v1model.p4>
 
 struct intrinsic_metadata_t {
@@ -42,10 +43,10 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name(".test_action") action test_action() {
-        digest<test1_digest>(32w0x666, test1_digest {dstAddr = hdr.ethernet.dstAddr,standard_metadata = standard_metadata});
+        digest<test1_digest>(32w0x666, (test1_digest){dstAddr = hdr.ethernet.dstAddr,standard_metadata = standard_metadata});
     }
     @name(".tbl0") table tbl0_0 {
         actions = {

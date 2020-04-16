@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20200408
 #include <v1model.p4>
 
 struct egress_metadata_t {
@@ -135,23 +136,23 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name(".NoAction") action NoAction_10() {
+    @noWarn("unused") @name(".NoAction") action NoAction_10() {
     }
-    @name(".NoAction") action NoAction_11() {
+    @noWarn("unused") @name(".NoAction") action NoAction_11() {
     }
-    @name(".NoAction") action NoAction_12() {
+    @noWarn("unused") @name(".NoAction") action NoAction_12() {
     }
-    @name(".NoAction") action NoAction_13() {
+    @noWarn("unused") @name(".NoAction") action NoAction_13() {
     }
-    @name(".NoAction") action NoAction_14() {
+    @noWarn("unused") @name(".NoAction") action NoAction_14() {
     }
-    @name(".NoAction") action NoAction_15() {
+    @noWarn("unused") @name(".NoAction") action NoAction_15() {
     }
-    @name(".NoAction") action NoAction_16() {
+    @noWarn("unused") @name(".NoAction") action NoAction_16() {
     }
-    @name(".NoAction") action NoAction_17() {
+    @noWarn("unused") @name(".NoAction") action NoAction_17() {
     }
     @name(".port_counters") direct_counter(CounterType.packets) port_counters_0;
     @name(".fdb_set") action fdb_set(bit<1> type_, bit<9> port_id) {
@@ -162,7 +163,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     @name(".nop") action nop() {
     }
     @name(".generate_learn_notify") action generate_learn_notify() {
-        digest<mac_learn_digest>(32w1024, mac_learn_digest {vlan_id = meta.ingress_metadata.vlan_id,srcAddr = hdr.eth.srcAddr,ingress_port = standard_metadata.ingress_port,learning = meta.ingress_metadata.learning});
+        digest<mac_learn_digest>(32w1024, (mac_learn_digest){vlan_id = meta.ingress_metadata.vlan_id,srcAddr = hdr.eth.srcAddr,ingress_port = standard_metadata.ingress_port,learning = meta.ingress_metadata.learning});
     }
     @name(".set_dmac") action set_dmac(bit<48> dst_mac_address, bit<9> port_id) {
         hdr.eth.dstAddr = dst_mac_address;

@@ -1,4 +1,5 @@
 #include <core.p4>
+#define V1MODEL_VERSION 20180101
 #include <v1model.p4>
 
 header ethernet_t {
@@ -138,7 +139,7 @@ control ingress(inout headers_t hdr, inout meta_t meta, inout standard_metadata_
 }
 
 control egress(inout headers_t hdr, inout meta_t meta, inout standard_metadata_t standard_metadata) {
-    @name(".NoAction") action NoAction_0() {
+    @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name(".my_drop") action my_drop_1(inout standard_metadata_t smeta_2) {
         mark_to_drop(smeta_2);
