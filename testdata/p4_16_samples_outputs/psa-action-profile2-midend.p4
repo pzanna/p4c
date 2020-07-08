@@ -29,9 +29,11 @@ control MyIC(inout ethernet_t a, inout EMPTY b, in psa_ingress_input_metadata_t 
     }
     @name("MyIC.ap") ActionProfile(32w1024) ap_0;
     @name("MyIC.ap1") ActionProfile(32w1024) ap1_0;
-    @name("MyIC.a1") action a1() {
+    @name("MyIC.a1") action a1(bit<48> param) {
+        a.dstAddr = param;
     }
-    @name("MyIC.a2") action a2() {
+    @name("MyIC.a2") action a2(bit<16> param) {
+        a.etherType = param;
     }
     @name("MyIC.tbl") table tbl_0 {
         key = {
@@ -56,7 +58,17 @@ control MyEC(inout EMPTY a, inout EMPTY b, in psa_egress_input_metadata_t c, ino
 }
 
 control MyID(packet_out buffer, out EMPTY a, out EMPTY b, out EMPTY c, inout ethernet_t d, in EMPTY e, in psa_ingress_output_metadata_t f) {
+    @hidden action psaactionprofile2l79() {
+        buffer.emit<ethernet_t>(d);
+    }
+    @hidden table tbl_psaactionprofile2l79 {
+        actions = {
+            psaactionprofile2l79();
+        }
+        const default_action = psaactionprofile2l79();
+    }
     apply {
+        tbl_psaactionprofile2l79.apply();
     }
 }
 

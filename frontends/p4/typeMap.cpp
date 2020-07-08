@@ -92,7 +92,7 @@ const IR::Type* TypeMap::getType(const IR::Node* element, bool notNull) const {
     auto result = get(typeMap, element);
     LOG4("Looking up type for " << dbp(element) << " => " << dbp(result));
     if (notNull && result == nullptr) {
-        BUG("Could not find type for %1%", dbp(element));
+        BUG_CHECK(errorCount() > 0, "Could not find type for %1%", dbp(element));
     }
     if (result != nullptr && result->is<IR::Type_Name>())
         BUG("%1% in map", dbp(result));
@@ -275,9 +275,10 @@ bool TypeMap::equivalent(const IR::Type* left, const IR::Type* right) {
         return le->name == re->name;
     }
 
-    BUG("%1%: Unexpected type check for equivalence", dbp(left));
+    BUG_CHECK(::errorCount(), "%1%: Unexpected type check for equivalence", dbp(left));
     // The following are not expected to be compared for equivalence:
     // Type_Dontcare, Type_Unknown, Type_Name, Type_Specialized, Type_Typedef
+    return false;
 }
 
 bool TypeMap::implicitlyConvertibleTo(const IR::Type* from, const IR::Type* to) {

@@ -30,7 +30,6 @@ header ipv4_t {
     bit<16>     hdrChecksum;
     bit<32>     srcAddr;
     bit<32>     dstAddr;
-    @length(((bit<32>)ihl << 5) + 32w4294967136) 
     varbit<320> options_ipv4;
 }
 
@@ -47,6 +46,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     bit<160> tmp;
     @name(".start") state start {
         tmp = packet.lookahead<bit<160>>();
+        tmp_hdr_0.setValid();
         tmp_hdr_0.setValid();
         tmp_hdr_0.version = tmp[159:156];
         tmp_hdr_0.ihl = tmp[155:152];

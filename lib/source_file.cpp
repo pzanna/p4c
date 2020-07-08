@@ -79,7 +79,7 @@ void InputSources::seal() {
 
 unsigned InputSources::lineCount() const {
     int size = contents.size();
-    if (contents.back().isNullOrEmpty()) {
+    if (contents.back().empty()) {
         // do not count the last line if it is empty.
         size -= 1;
         if (size < 0)
@@ -278,10 +278,14 @@ cstring InputSources::toDebugString() const {
 ///////////////////////////////////////////////////
 
 cstring SourceInfo::toSourceFragment() const {
+    if (!isValid())
+        return "";
     return sources->getSourceFragment(*this);
 }
 
 cstring SourceInfo::toBriefSourceFragment() const {
+    if (!isValid())
+        return "";
     return sources->getBriefSourceFragment(*this);
 }
 

@@ -44,10 +44,10 @@ class MinimalNameGenerator : public NameGenerator, public Inspector {
     }
 
     /// Generate a name from @p base that fresh for the program.
-    cstring newName(cstring base);
+    cstring newName(cstring base) override;
 };
 
-// FIXME -- temp cpmmon base class to allow use of ReferenceMap or ResolutionContext
+// FIXME -- temp common base class to allow use of ReferenceMap or ResolutionContext
 // interchangeably when looking up declarations.  This should go away once the refMap does
 class DeclarationLookup {
  public:
@@ -79,26 +79,28 @@ class ReferenceMap final : public ProgramMap, public NameGenerator, public Decla
     ReferenceMap();
     /// Looks up declaration for @p path. If @p notNull is false, then
     /// failure to find a declaration is an error.
-    const IR::IDeclaration* getDeclaration(const IR::Path* path, bool notNull = false) const;
+    const IR::IDeclaration* getDeclaration(const IR::Path* path, bool notNull = false)
+        const override;
 
     /// Sets declaration for @p path to @p decl.
     void setDeclaration(const IR::Path* path, const IR::IDeclaration* decl);
 
     /// Looks up declaration for @p pointer. If @p notNull is false,
     /// then failure to find a declaration is an error.
-    const IR::IDeclaration* getDeclaration(const IR::This* pointer, bool notNull = false) const;
+    const IR::IDeclaration* getDeclaration(const IR::This* pointer, bool notNull = false)
+        const override;
 
     /// Sets declaration for @p pointer to @p decl.
     void setDeclaration(const IR::This* pointer, const IR::IDeclaration* decl);
 
-    void dbprint(std::ostream& cout) const;
+    void dbprint(std::ostream& cout) const override;
 
     /// Set boolean indicating whether map is for a P4_14 program to @p isV1.
     void setIsV1(bool isv1) { this->isv1 = isv1; }
     void setAnyOrder(bool anyOrder) { this->isv1 = anyOrder; }
 
     /// Generate a name from @p base that fresh for the program.
-    cstring newName(cstring base);
+    cstring newName(cstring base) override;
 
     /// Clear the reference map
     void clear();

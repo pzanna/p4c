@@ -714,15 +714,18 @@ getMatchType(cstring matchTypeName) {
     }
 }
 
-// getTypeWidth returns the width in bits for the @type, except if it is a user-defined type with a
-// @p4runtime_translation annotation, in which case it returns the SDN bitwidth specified by the
-// user.
+// getTypeWidth returns the width in bits for the @type, except if it is a
+// user-defined type with a @p4runtime_translation annotation, in which case it
+// returns W if the type is bit<W>, and 0 otherwise (i.e. if the type is
+// string).
 static int
 getTypeWidth(const IR::Type* type, TypeMap* typeMap) {
-    std::string uri;
-    int sdnB;
-    auto isTranslatedType = hasTranslationAnnotation(type, &uri, &sdnB);
-    return isTranslatedType ? sdnB : typeMap->minWidthBits(type, type->getNode());
+    TranslationAnnotation annotation;
+    if (hasTranslationAnnotation(type, &annotation)) {
+        // W if the type is bit<W>, and 0 if the type is string
+        return annotation.controller_type.width;
+    }
+    return typeMap->minWidthBits(type, type->getNode());
 }
 
 /// @return the header instance fields matched against by @table's key. The
@@ -789,10 +792,9 @@ class ParseAnnotations : public P4::ParseAnnotations {
         // "locally" (in this case on action profile instances since this
         // annotation is for them).
         PARSE("max_group_size", Constant),
-        // @p4runtime_translation has two args
-        PARSE_PAIR("p4runtime_translation",
-                   Expression),
-    }) { }
+        {"p4runtime_translation",
+         &P4::ParseAnnotations::parseP4rtTranslationAnnotation},
+    }) {}
 };
 
 namespace {
@@ -1233,16 +1235,36 @@ class P4RuntimeAnalyzer {
                     [](cstring name) { return name == IR::Annotation::matchAnnotation; });
                 addDocumentation(match, f);
             }
+        } else if (et->is<IR::Type_SerEnum>()) {
+            auto serEnum = et->to<IR::Type_SerEnum>();
+            auto fType = serEnum->type;
+            if (!fType->is<IR::Type_Bits>()) {
+                ::error(ErrorType::ERR_UNSUPPORTED,
+                        "Unsupported type argument for Value Set; "
+                        "this version of P4Runtime requires that when the type parameter "
+                        "of a Value Set is a serializable enum, "
+                        "it must be of type bit<W>, but %1% is not", serEnum);
+            }
+            auto fields = serEnum->members;
+            p4rt_id_t index = 1;
+            for (auto f : fields) {
+                auto* match = vs->add_match();
+                match->set_id(index++);
+                match->set_name(f->controlPlaneName());
+                match->set_bitwidth(fType->width_bits());
+                match->set_match_type(MatchField::MatchTypes::EXACT);
+            }
+
         } else if (et->is<IR::Type_BaseList>()) {
             ::error(ErrorType::ERR_UNSUPPORTED,
                     "%1%: Unsupported type argument for Value Set; "
                     "this version of P4Runtime requires the type parameter of a Value Set "
-                    "to be a bit<W> or a struct of bit<W> fields",
+                    "to be a bit<W>, a struct of bit<W> fields, or a serializable enum",
                     inst);
         } else {
             ::error(ErrorType::ERR_INVALID,
                     "%1%: invalid type parameter for Value Set; "
-                    "it must be one of bit<W>, struct or tuple",
+                    "it must be one of bit<W>, struct, tuple or serializable enum",
                     inst);
         }
     }
@@ -2027,6 +2049,7 @@ P4RuntimeSerializer::serializeP4RuntimeIfRequired(const P4RuntimeAPI& p4Runtime,
 P4RuntimeSerializer::P4RuntimeSerializer() {
     registerArch("v1model", new ControlPlaneAPI::Standard::V1ModelArchHandlerBuilder());
     registerArch("psa", new ControlPlaneAPI::Standard::PSAArchHandlerBuilder());
+    registerArch("ubpf", new ControlPlaneAPI::Standard::UBPFArchHandlerBuilder());
 }
 
 P4RuntimeSerializer*

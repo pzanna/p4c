@@ -81,25 +81,20 @@ class ParserState : ISimpleNamespace, Declaration, IAnnotated {
 }
 
 // A parser that contains all states (unlike the P4 v1.0 parser, which is really just a state)
-class P4Parser : Type_Declaration, ISimpleNamespace, IApply, IContainer {
+class P4Parser : Type_Declaration, INestedNamespace, ISimpleNamespace, IApply, IContainer {
     Type_Parser                                 type;
     optional ParameterList                      constructorParams = new ParameterList;
     optional inline IndexedVector<Declaration>  parserLocals;
     optional inline IndexedVector<ParserState>  states;
 
     TypeParameters getTypeParameters() const override { return type->getTypeParameters(); }
+    std::vector<INamespace> getNestedNamespaces() const override {
+        return { type->typeParameters, type->applyParams, constructorParams }; }
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
-        return type->typeParameters->getDeclarations()
-                ->concat(type->applyParams->getDeclarations())
-                ->concat(constructorParams->getDeclarations())
-                ->concat(parserLocals.getDeclarations())
-                ->concat(states.getDeclarations()); }
+        return parserLocals.getDeclarations()->concat(states.getDeclarations()); }
     IDeclaration getDeclByName(cstring name) const override {
         auto decl = parserLocals.getDeclaration(name);
         if (!decl) decl = states.getDeclaration(name);
-        if (!decl) decl = type->applyParams->getDeclByName(name);
-        if (!decl) decl = constructorParams->getDeclByName(name);
-        if (!decl) decl = type->typeParameters->getDeclByName(name);
         return decl; }
     Type_Method getApplyMethodType() const override { return type->getApplyMethodType(); }
     ParameterList getApplyParameters() const override { return type->getApplyParameters(); }
@@ -117,27 +112,22 @@ class P4Parser : Type_Declaration, ISimpleNamespace, IApply, IContainer {
     toString { return cstring("parser ") + externalName(); }
 }
 
-class P4Control : Type_Declaration, ISimpleNamespace, IApply, IContainer {
+class P4Control : Type_Declaration, INestedNamespace, ISimpleNamespace, IApply, IContainer {
     Type_Control                                type;
     optional ParameterList                      constructorParams = new ParameterList;
     optional inline IndexedVector<Declaration>  controlLocals;
     BlockStatement                              body;
 
     TypeParameters getTypeParameters() const override { return type->getTypeParameters(); }
+    std::vector<INamespace> getNestedNamespaces() const override {
+        return { type->typeParameters, type->applyParams, constructorParams }; }
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
-        return type->typeParameters->getDeclarations()
-                ->concat(type->applyParams->getDeclarations())
-                ->concat(constructorParams->getDeclarations())
-                ->concat(controlLocals.getDeclarations()); }
+        return controlLocals.getDeclarations(); }
     Type_Method getApplyMethodType() const override { return type->getApplyMethodType(); }
     ParameterList getApplyParameters() const override { return type->getApplyParameters(); }
     Type_Method getConstructorMethodType() const override;
     IDeclaration getDeclByName(cstring name) const override {
-        auto decl = controlLocals.getDeclaration(name);
-        if (!decl) decl = type->applyParams->getDeclByName(name);
-        if (!decl) decl = constructorParams->getDeclByName(name);
-        if (!decl) decl = type->typeParameters->getDeclByName(name);
-        return decl; }
+        return controlLocals.getDeclaration(name); }
     ParameterList getConstructorParameters() const override { return constructorParams; }
 #apply
     validate {
@@ -476,6 +466,7 @@ class MethodCallStatement : Statement {
     MethodCallStatement(Util::SourceInfo si, Expression m,
                         const std::initializer_list<Argument> &a)
     : Statement(si), methodCall(new MethodCallExpression(si, m, a)) {}
+    toString{ return methodCall->toString(); }
 }
 
 class SwitchCase {
@@ -483,10 +474,9 @@ class SwitchCase {
     NullOK Statement statement;  // If missing then it's a fall-through
 #nodbprint
     validate{
-        BUG_CHECK(label->is<IR::DefaultExpression>() ||
-                  label->is<IR::PathExpression>(),
-                  "%1%: Unexpected expression for switch case",
-                  label);
+        if (!(label->is<IR::DefaultExpression>() || label->is<IR::PathExpression>()))
+            ::error(ErrorType::ERR_EXPRESSION,
+                    "%1%: Unexpected expression for switch case", *this);
         BUG_CHECK(statement == nullptr || statement->is<IR::BlockStatement>(),
                   "%1%: Expected a block statement",
                   statement);
@@ -503,7 +493,7 @@ class SwitchStatement : Statement {
         v.parallel_visit(cases, "cases"); }
 }
 
-class Function : Declaration, IFunctional, ISimpleNamespace {
+class Function : Declaration, IFunctional, ISimpleNamespace, INestedNamespace {
     Type_Method    type;
     BlockStatement body;
     ParameterList getParameters() const override {
@@ -513,6 +503,8 @@ class Function : Declaration, IFunctional, ISimpleNamespace {
         return type->parameters->getDeclarations(); }
     IDeclaration getDeclByName(cstring name) const override {
         return type->parameters->getDeclByName(name); }
+    std::vector<INamespace> getNestedNamespaces() const override {
+        return { type->typeParameters }; }
 }
 
 /////////////////////////////////////////////////////////////

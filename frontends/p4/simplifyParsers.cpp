@@ -46,6 +46,20 @@ class RemoveUnreachableStates : public Transform {
             transitions->reachable(start->to<IR::ParserState>(), reachable);
             // Remove unreachable states from call-graph
             transitions->restrict(reachable);
+            // If neither the accept nor the reject states are
+            // reachable the parser we signal an error.  The reject
+            // state will probably be reached through an error.
+            bool acceptReachable = false;
+            bool rejectReachable = false;
+            for (auto s : reachable) {
+                if (s->name == IR::ParserState::reject)
+                    rejectReachable = true;
+                else if (s->name == IR::ParserState::accept)
+                    acceptReachable = true;
+            }
+            if (!rejectReachable && !acceptReachable)
+                ::error(ErrorType::ERR_UNREACHABLE,
+                        "%1%: Parser never reaches accept or reject state", parser);
             LOG1("Parser " << dbp(parser) << " has " << transitions->size() << " reachable states");
         }
         return parser;
@@ -99,6 +113,10 @@ class CollapseChains : public Transform {
         // has no other incoming edges.
         for (auto oe : *transitions) {
             auto node = oe.first;
+            // Avoid merging in case of state annotation
+            if (!node->annotations->annotations.empty()) {
+                continue;
+            }
             auto outedges = oe.second;
             if (outedges->size() != 1)
                 continue;
@@ -110,6 +128,7 @@ class CollapseChains : public Transform {
             auto callers = transitions->getCallers(next);
             if (callers->size() != 1)
                 continue;
+            // Avoid merging in case of state annotation
             if (!next->annotations->annotations.empty())
                 // we are not sure what to do with the annotations
                 continue;

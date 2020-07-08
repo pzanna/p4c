@@ -67,6 +67,16 @@ namespace UBPF {
             }
 
             return;
+        } else if (function->method->name.name == control->program->model.truncate.name) {
+            if (function->expr->arguments->size() == 1) {
+                builder->appendFormat("%s = (int) (",
+                        control->program->packetTruncatedSizeVar.c_str());
+                visit(function->expr->arguments->at(0)->expression);
+                builder->append(")");
+            } else {
+                ::error("%1%: One argument expected", function->expr);
+            }
+            return;
         }
         processCustomExternFunction(function, UBPFTypeFactory::instance);
     }
@@ -519,7 +529,11 @@ namespace UBPF {
         auto ei = P4::EnumInstance::resolve(expression, typeMap);
         if (ei == nullptr) {
             visit(expression->expr);
-            builder->append(".");
+            if (name == control->program->stdMetadataVar) {
+                builder->append("->");
+            } else {
+                builder->append(".");
+            }
         }
         builder->append(expression->member);
         return false;
@@ -611,8 +625,8 @@ namespace UBPF {
     bool UBPFControl::build() {
         passVariable = program->refMap->newName("pass");
         auto pl = controlBlock->container->type->applyParams;
-        if (pl->size() != 2) {
-            ::error("Expected control block to have exactly 2 parameter");
+        if (pl->size() != 3) {
+            ::error("Expected control block to have exactly 3 parameter");
             return false;
         }
 

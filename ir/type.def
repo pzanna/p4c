@@ -461,7 +461,7 @@ class SerEnumMember : Declaration, CompileTimeValue {
 /** A serializable enumeration with a backing type */
 class Type_SerEnum : Type_Declaration, ISimpleNamespace, IAnnotated {
     optional Annotations annotations = Annotations::empty;
-    Type_Bits type;
+    Type type;
     inline IndexedVector<SerEnumMember> members;
     Annotations getAnnotations() const override { return annotations; }
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
@@ -536,7 +536,8 @@ class ArgumentInfo {
     bool leftValue;
     bool compileTimeConstant;
     Type type;
-    ID   name;  // only present if using named arguments
+    Argument argument;
+    toString { return argument->toString(); }
 #nodbprint
 }
 
@@ -568,9 +569,9 @@ class Method : Declaration, IAnnotated, IFunctional, ISimpleNamespace {
     Annotations getAnnotations() const override { return annotations; }
     ParameterList getParameters() const override { return type->parameters; }
     // annotations can refer to parameters, so need to look them up in scope
-    IDeclaration getDeclByName(cstring name) const {
+    IDeclaration getDeclByName(cstring name) const override {
         return type->parameters->getDeclByName(name); }
-    Util::Enumerator<IDeclaration> *getDeclarations() const {
+    Util::Enumerator<IDeclaration> *getDeclarations() const override {
         return type->parameters->getDeclarations(); }
 }
 
@@ -596,15 +597,16 @@ class Type_Newtype : Type_Declaration, IAnnotated {
 }
 
 /// An 'extern' black-box (not a function)
-class Type_Extern : Type_Declaration, IGeneralNamespace, IMayBeGenericType, IAnnotated {
+class Type_Extern : Type_Declaration, INestedNamespace, IGeneralNamespace,
+                    IMayBeGenericType, IAnnotated {
     optional TypeParameters typeParameters = new TypeParameters;
     optional inline Vector<Method> methods;  // methods can be overloaded, so this is not NameMap
     optional inline NameMap<Attribute, ordered_map> attributes;  // P4_14 only, currently
     optional Annotations annotations = Annotations::empty;
 
+    std::vector<INamespace> getNestedNamespaces() const override { return { typeParameters }; }
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
-        return typeParameters->getDeclarations()
-            ->concat(attributes.valueEnumerator()->as<const IDeclaration*>())
+        return attributes.valueEnumerator()->as<const IDeclaration*>()
             ->concat(methods.getEnumerator()->as<const IDeclaration*>()); }
     virtual TypeParameters getTypeParameters() const override { return typeParameters; }
     validate{ methods.check_null(); }

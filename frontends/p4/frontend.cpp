@@ -152,6 +152,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new ValidateMatchAnnotations(&typeMap),
         new DefaultArguments(&refMap, &typeMap),  // add default argument values to parameters
         new BindTypeVariables(&refMap, &typeMap),
+        new RemoveParserControlFlow(&refMap, &typeMap),
         new StructInitializers(&refMap, &typeMap),
         new SpecializeGenericFunctions(&refMap, &typeMap),
         new TableKeyNames(&refMap, &typeMap),
@@ -168,7 +169,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new ResetHeaders(&refMap, &typeMap),
         new UniqueNames(&refMap),  // Give each local declaration a unique internal name
         new MoveDeclarations(),  // Move all local declarations to the beginning
-        new MoveInitializers(),
+        new MoveInitializers(&refMap),
         new SideEffectOrdering(&refMap, &typeMap, skipSideEffectOrdering),
         new SetHeaders(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),

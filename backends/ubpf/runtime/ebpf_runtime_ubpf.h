@@ -22,9 +22,10 @@ limitations under the License.
 #include "../../ebpf/runtime/ebpf_registry.h"
 #include "ubpf_test.h"
 
-typedef uint64_t (*packet_filter)(void *dp, uint64_t pkt_len);
+struct standard_metadata;
 
-extern uint64_t entry(void *dp, uint64_t pkt_len);
+extern uint64_t entry(void *, struct standard_metadata *);
+typedef uint64_t (*packet_filter)(void *dp, struct standard_metadata *std_meta);
 
 void *run_and_record_output(packet_filter entry, const char *pcap_base, pcap_list_t *pkt_list, int debug);
 
@@ -46,6 +47,8 @@ static void inline init_ubpf_table_test(char *name, unsigned int key_size, unsig
     ubpf_packet_data_test(ctx)
 #define ubpf_adjust_head(ctx, ofs) \
     ubpf_adjust_head_test(ctx, ofs)
+#define ubpf_truncate_packet(ctx, maxlen) \
+    ubpf_truncate_packet_test(ctx, maxlen)
 #define ubpf_map_lookup(table, key) \
     registry_lookup_table_elem(#table, key)
 #define ubpf_map_update(table, key, value) \

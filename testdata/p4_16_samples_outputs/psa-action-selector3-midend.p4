@@ -32,9 +32,11 @@ parser MyEP(packet_in buffer, out EMPTY a, inout EMPTY b, in psa_egress_parser_i
 control MyIC(inout ethernet_t a, inout user_meta_t b, in psa_ingress_input_metadata_t c, inout psa_ingress_output_metadata_t d) {
     @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    @name("MyIC.a1") action a1() {
+    @name("MyIC.a1") action a1(bit<48> param) {
+        a.dstAddr = param;
     }
-    @name("MyIC.a2") action a2() {
+    @name("MyIC.a2") action a2(bit<16> param) {
+        a.etherType = param;
     }
     @name("MyIC.tbl") table tbl_0 {
         key = {
@@ -60,7 +62,17 @@ control MyEC(inout EMPTY a, inout EMPTY b, in psa_egress_input_metadata_t c, ino
 }
 
 control MyID(packet_out buffer, out EMPTY a, out EMPTY b, out EMPTY c, inout ethernet_t d, in user_meta_t e, in psa_ingress_output_metadata_t f) {
+    @hidden action psaactionselector3l85() {
+        buffer.emit<ethernet_t>(d);
+    }
+    @hidden table tbl_psaactionselector3l85 {
+        actions = {
+            psaactionselector3l85();
+        }
+        const default_action = psaactionselector3l85();
+    }
     apply {
+        tbl_psaactionselector3l85.apply();
     }
 }
 

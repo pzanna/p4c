@@ -309,8 +309,14 @@ const IR::Node* DoStrengthReduction::postorder(IR::Slice* expr) {
             expr->e0 = shift_of;
             expr->e1 = new IR::Constant(hi + shift_amt);
             expr->e2 = new IR::Constant(lo + shift_amt); }
-        if (hi + shift_amt <= 0)
-            return new IR::Constant(IR::Type_Bits::get(hi - lo + 1), 0);
+        if (hi + shift_amt <= 0) {
+            if (!hasSideEffects(shift_of))
+                return new IR::Constant(IR::Type_Bits::get(hi - lo + 1), 0);
+            // TODO: here we could promote the side-effect into a
+            // separate statement.  and still return the constant.
+            // But for now we only produce expressions.
+            return expr;
+        }
         if (lo + shift_amt < 0) {
             expr->e0 = shift_of;
             expr->e1 = new IR::Constant(hi + shift_amt);
@@ -339,6 +345,12 @@ const IR::Node* DoStrengthReduction::postorder(IR::Slice* expr) {
                     new IR::Slice(cat->right, rwidth-1, expr->getL()));
         }
     }
+
+    while (auto cast = expr->e0->to<IR::Cast>()) {
+        if (expr->getH() < size_t(cast->expr->type->width_bits())) {
+            expr->e0 = cast->expr;
+        } else {
+            break; } }
 
     // out-of-bound error has been caught in type checking
     if (auto sl = expr->e0->to<IR::Slice>()) {

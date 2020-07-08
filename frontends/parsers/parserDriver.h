@@ -186,6 +186,11 @@ class P4ParserDriver final : public AbstractParserDriver {
         const Util::SourceInfo& srcInfo,
         const IR::Vector<IR::AnnotationToken>& body);
 
+    // P4Runtime Annotations /////////////////////////////////////////////////
+    static const IR::Vector<IR::Expression>* parseP4rtTranslationAnnotation(
+        const Util::SourceInfo& srcInfo,
+        const IR::Vector<IR::AnnotationToken>& body);
+
  protected:
     friend class P4::P4Lexer;
     friend class P4::P4Parser;
@@ -207,6 +212,10 @@ class P4ParserDriver final : public AbstractParserDriver {
     /// A scratch buffer to hold the current string literal. (They're lexed
     /// incrementally, so we need to hold some state between tokens.)
     std::string stringLiteral;
+
+    // flag to track when template args are expected, to adjust the precedence
+    // of '<'
+    bool template_args;
 
  private:
     P4ParserDriver();

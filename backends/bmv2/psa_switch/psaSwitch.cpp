@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "frontends/common/model.h"
+#include "frontends/p4/cloner.h"
 #include "psaSwitch.h"
 
 namespace BMV2 {
@@ -22,6 +23,7 @@ namespace BMV2 {
 void PsaProgramStructure::create(ConversionContext* ctxt) {
     createTypes(ctxt);
     createHeaders(ctxt);
+    createScalars(ctxt);
     createExterns();
     createParsers(ctxt);
     createActions(ctxt);
@@ -114,6 +116,26 @@ void PsaProgramStructure::createTypes(ConversionContext* ctxt) {
     /* TODO */
     // add errors to json
     // add enums to json
+}
+
+void PsaProgramStructure::createScalars(ConversionContext* ctxt) {
+    auto name = scalars.begin()->first;
+    ctxt->json->add_header("scalars_t", name);
+    ctxt->json->add_header_type("scalars_t");
+
+    for (auto kv : scalars) {
+        LOG5("Adding a scalar field " << kv.second << " to generated json");
+        auto field = new Util::JsonArray();
+        auto ftype = typeMap->getType(kv.second, true);
+        if (auto type = ftype->to<IR::Type_Bits>()) {
+            field->append(kv.second->name);
+            field->append(type->size);
+            field->append(type->isSigned);
+        } else {
+            BUG_CHECK(kv.second, "%1 is not of Type_Bits");
+        }
+        ctxt->json->add_header_field("scalars_t", field);
+    }
 }
 
 void PsaProgramStructure::createHeaders(ConversionContext* ctxt) {
@@ -390,6 +412,19 @@ void InspectPsaProgram::addTypesAndInstances(const IR::Type_StructLike* type, bo
     }
 }
 
+
+bool InspectPsaProgram::preorder(const IR::Declaration_Variable* dv) {
+        auto ft = typeMap->getType(dv->getNode(), true);
+        cstring scalarsName = refMap->newName("scalars");
+
+        if (ft->is<IR::Type_Bits>()) {
+            LOG5("Adding " << dv << " into scalars map");
+            pinfo->scalars.emplace(scalarsName, dv);
+        }
+
+        return false;
+}
+
 // This visitor only visits the parameter in the statement from architecture.
 bool InspectPsaProgram::preorder(const IR::Parameter* param) {
     auto ft = typeMap->getType(param->getNode(), true);
@@ -474,6 +509,10 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
                 new ProcessControls(&structure.pipeline_controls)),
         new P4::SimplifyControlFlow(refMap, typeMap),
         new P4::RemoveAllUnusedDeclarations(refMap),
+        // Converts the DAG into a TREE (at least for expressions)
+        // This is important later for conversion to JSON.
+        new P4::ClonePathExpressions(),
+        new P4::ClearTypeMap(typeMap),
         evaluator,
         new VisitFunctor([this, evaluator, structure]() {
             toplevel = evaluator->getToplevelBlock(); }),
@@ -616,8 +655,14 @@ Util::IJson* ExternConverter_Register::convertExternObject(
     UNUSED ConversionContext* ctxt, UNUSED const P4::ExternMethod* em,
     UNUSED const IR::MethodCallExpression* mc, UNUSED const IR::StatOrDecl *s,
     UNUSED const bool& emitExterns) {
-    if (mc->arguments->size() != 2) {
+    if (em->method->name != "write" && em->method->name != "read") {
+        modelError("Unsupported register method %1%", mc);
+        return nullptr;
+    } else if (em->method->name == "write" && mc->arguments->size() != 2) {
         modelError("Expected 2 arguments for %1%", mc);
+        return nullptr;
+    } else if (em->method->name == "read" && mc->arguments->size() != 2) {
+        modelError("p4c-psa internally requires 2 arguments for %1%", mc);
         return nullptr;
     }
     auto reg = new Util::JsonObject();
@@ -628,12 +673,11 @@ Util::IJson* ExternConverter_Register::convertExternObject(
         auto primitive = mkPrimitive("register_read");
         auto parameters = mkParameters(primitive);
         primitive->emplace_non_null("source_info", s->sourceInfoJsonObj());
-        /* TODO */
-        // auto dest = ctxt->conv->convert(mc->arguments->at(0)->expression);
-        // parameters->append(dest);
+        auto dest = ctxt->conv->convert(mc->arguments->at(0)->expression);
+        parameters->append(dest);
         parameters->append(reg);
-        // auto index = ctxt->conv->convert(mc->arguments->at(1)->expression);
-        // parameters->append(index);
+        auto index = ctxt->conv->convert(mc->arguments->at(1)->expression);
+        parameters->append(index);
         return primitive;
     } else if (em->method->name == "write") {
         auto primitive = mkPrimitive("register_write");
@@ -910,6 +954,10 @@ void ExternConverter_DirectMeter::convertExternInstance(
 void ExternConverter_Register::convertExternInstance(
     UNUSED ConversionContext* ctxt, UNUSED const IR::Declaration* c,
     UNUSED const IR::ExternBlock* eb, UNUSED const bool& emitExterns) {
+    size_t paramSize = eb->getConstructorParameters()->size();
+    if (paramSize == 2) {
+        modelError("%1%: Expecting 1 parameter. Initial value not supported", eb->constructor);
+    }
     auto inst = c->to<IR::Declaration_Instance>();
     cstring name = inst->controlPlaneName();
     auto jreg = new Util::JsonObject();
@@ -930,8 +978,8 @@ void ExternConverter_Register::convertExternInstance(
         return;
     }
     auto st = eb->instanceType->to<IR::Type_SpecializedCanonical>();
-    if (st->arguments->size() != 1) {
-        modelError("%1%: expected 1 type argument", st);
+    if (st->arguments->size() != 2) {
+        modelError("%1%: expected 2 type argument", st);
         return;
     }
     auto regType = st->arguments->at(0);

@@ -46,7 +46,6 @@ header ipv4_option_security_t {
 header ipv4_option_timestamp_t {
     bit<8>      value;
     bit<8>      len;
-    @length(((bit<32>)len << 3) + 32w4294967280) 
     varbit<304> data;
 }
 
@@ -113,6 +112,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     }
     @name(".parse_ipv4_option_timestamp") state parse_ipv4_option_timestamp {
         tmp_0 = packet.lookahead<bit<16>>();
+        tmp_hdr_0.setValid();
         tmp_hdr_0.setValid();
         tmp_hdr_0.value = tmp_0[15:8];
         tmp_hdr_0.len = tmp_0[7:0];

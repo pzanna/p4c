@@ -43,6 +43,8 @@ namespace UBPF {
         UBPFModel &model;
 
         cstring contextVar, outerHdrOffsetVar, outerHdrLengthVar;
+        cstring stdMetadataVar;
+        cstring packetTruncatedSizeVar;
 
         UBPFProgram(const EbpfOptions &options, const IR::P4Program *program,
                     P4::ReferenceMap *refMap, P4::TypeMap *typeMap, const IR::ToplevelBlock *toplevel) :
@@ -54,6 +56,8 @@ namespace UBPF {
             contextVar = cstring("ctx");
             lengthVar = cstring("pkt_len");
             endLabel = cstring("deparser");
+            stdMetadataVar = cstring("std_meta");
+            packetTruncatedSizeVar = cstring("packetTruncatedSize");
         }
 
         bool build() override;
@@ -63,6 +67,7 @@ namespace UBPF {
         void emitTypes(EBPF::CodeBuilder *builder) override;
         void emitTableDefinition(EBPF::CodeBuilder *builder) const;
         void emitPktVariable(UbpfCodeBuilder *builder) const;
+        void emitPacketLengthVariable(UbpfCodeBuilder *builder) const;
         void emitHeaderInstances(EBPF::CodeBuilder *builder) override;
         void emitMetadataInstance(EBPF::CodeBuilder *builder) const;
         void emitLocalVariables(EBPF::CodeBuilder *builder) override;
