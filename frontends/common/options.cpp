@@ -19,6 +19,7 @@ limitations under the License.
 #include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_set>
+#include <regex>
 
 #include "options.h"
 #include "lib/log.h"
@@ -69,7 +70,7 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
                        } else if (!strcmp(arg, "1.2") || !strcmp(arg, "16")) {
                            langVersion = CompilerOptions::FrontendVersion::P4_16;
                        } else {
-                           ::error("Illegal language version %1%", arg);
+                           ::error(ErrorType::ERR_INVALID, "Illegal language version %1%", arg);
                            return false;
                        }
                        return true; },
@@ -82,7 +83,7 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
                        } else if (!strcmp(arg, "16") || !strcmp(arg, "p4-16")) {
                            langVersion = CompilerOptions::FrontendVersion::P4_16;
                        } else {
-                           ::error("Illegal language version %1%", arg);
+                           ::error(ErrorType::ERR_INVALID, "Illegal language version %1%", arg);
                            return false;
                        }
                        return true; },
@@ -127,7 +128,7 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
                        } else if (!strcmp(arg, "text")) {
                            p4RuntimeFormat = P4::P4RuntimeFormat::TEXT;
                        } else {
-                           ::error("Illegal P4Runtime format %1%", arg);
+                           ::error(ErrorType::ERR_INVALID, "Illegal P4Runtime format %1%", arg);
                            return false;
                        }
                        return true; },
@@ -250,12 +251,12 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
 
 void CompilerOptions::setInputFile() {
     if (remainingOptions.size() > 1) {
-        ::error("Only one input file must be specified: %s",
+        ::error(ErrorType::ERR_OVERLIMIT, "Only one input file must be specified: %s",
                 cstring::join(remainingOptions.begin(), remainingOptions.end(), ","));
         usage();
         exit(1);
     } else if (remainingOptions.size() == 0) {
-        ::error("No input files specified");
+        ::error(ErrorType::ERR_EXPECTED, "No input files specified");
         usage();
         exit(1);
     } else {
@@ -338,7 +339,7 @@ FILE* CompilerOptions::preprocess() {
             std::cerr << "Invoking preprocessor " << std::endl << cmd << std::endl;
         in = popen(cmd.c_str(), "r");
         if (in == nullptr) {
-            ::error("Error invoking preprocessor");
+            ::error(ErrorType::ERR_IO, "Error invoking preprocessor");
             perror("");
             return nullptr;
         }
@@ -362,9 +363,10 @@ void CompilerOptions::closeInput(FILE* inputStream) const {
     if (close_input) {
         int exitCode = pclose(inputStream);
         if (WIFEXITED(exitCode) && WEXITSTATUS(exitCode) == 4)
-            ::error("input file %s does not exist", file);
+            ::error(ErrorType::ERR_IO, "input file %s does not exist", file);
         else if (exitCode != 0)
-            ::error("Preprocessor returned exit code %d; aborting compilation", exitCode);
+            ::error(ErrorType::ERR_IO,
+                    "Preprocessor returned exit code %d; aborting compilation", exitCode);
     }
 }
 
@@ -393,7 +395,19 @@ void CompilerOptions::dumpPass(const char* manager, unsigned seq, const char* pa
         std::cerr << name << std::endl;
 
     for (auto s : top4) {
-        if (strstr(name.c_str(), s.c_str()) != nullptr) {
+        bool match = false;
+        try {
+           auto s_regex = std::regex(s, std::regex_constants::ECMAScript);
+            // we use regex_search instead of regex_match
+            // regex_match compares the regex against the entire string
+            // regex_search checks if the regex is contained as substring
+            match = std::regex_search(name.begin(), name.end(), s_regex);
+        } catch (const std::regex_error &e) {
+            ::error(ErrorType::ERR_INVALID, "Malformed toP4 regex string \"%s\".\n"
+                    "The regex matcher follows ECMAScript syntax.", s);
+            exit(1);
+        }
+        if (match) {
             cstring suffix = cstring("-") + name;
             cstring filename = file;
             if (filename == "-")

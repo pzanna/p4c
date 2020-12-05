@@ -42,6 +42,7 @@ set (P4_FRONTEND_SRCS
   p4/parseAnnotations.cpp
   p4/parserCallGraph.cpp
   p4/parserControlFlow.cpp
+  p4/reassociation.cpp
   p4/removeReturns.cpp
   p4/reservedWords.cpp
   p4/resetHeaders.cpp
@@ -52,6 +53,7 @@ set (P4_FRONTEND_SRCS
   p4/simplifyParsers.cpp
   p4/specialize.cpp
   p4/specializeGenericFunctions.cpp
+  p4/specializeGenericTypes.cpp
   p4/strengthReduction.cpp
   p4/structInitializers.cpp
   p4/switchAddDefault.cpp
@@ -107,6 +109,7 @@ set (P4_FRONTEND_HDRS
   p4/parseAnnotations.h
   p4/parserCallGraph.h
   p4/parserControlFlow.h
+  p4/reassociation.h
   p4/removeReturns.h
   p4/reservedWords.h
   p4/resetHeaders.h
@@ -117,6 +120,7 @@ set (P4_FRONTEND_HDRS
   p4/simplifyParsers.h
   p4/specialize.h
   p4/specializeGenericFunctions.h
+  p4/specializeGenericTypes.h
   p4/strengthReduction.h
   p4/structInitializers.h
   p4/switchAddDefault.h
@@ -200,7 +204,7 @@ macro(add_parser pname)
   if (CMAKE_VERSION VERSION_LESS "3.7.2")
       BISON_TARGET (${pname}Parser parsers/${pname}/${pname}parser.ypp ${CMAKE_CURRENT_BINARY_DIR}/parsers/${pname}/${pname}parser.cpp VERBOSE ${CMAKE_CURRENT_BINARY_DIR}/parsers/${pname}/${pname}parser.output)
   else ()
-      BISON_TARGET (${pname}Parser parsers/${pname}/${pname}parser.ypp ${CMAKE_CURRENT_BINARY_DIR}/parsers/${pname}/${pname}parser.cpp VERBOSE)
+      BISON_TARGET (${pname}Parser parsers/${pname}/${pname}parser.ypp ${CMAKE_CURRENT_BINARY_DIR}/parsers/${pname}/${pname}parser.cpp VERBOSE COMPILE_FLAGS "-Werror=conflicts-sr -Werror=conflicts-rr")
   endif ()
 
   # regardless of the output name, flex puts out yy.lex.c, so we use a custom command to generate

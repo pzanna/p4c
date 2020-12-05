@@ -23,7 +23,8 @@ namespace P4 {
 // If useExpressionType is true trust the type in mce->type
 MethodInstance*
 MethodInstance::resolve(const IR::MethodCallExpression* mce, DeclarationLookup* refMap,
-                        TypeMap* typeMap, bool useExpressionType, const Visitor::Context *ctxt) {
+                        TypeMap* typeMap, bool useExpressionType, const Visitor::Context *ctxt,
+                        bool incomplete) {
     auto mt = typeMap->getType(mce->method);
     if (mt == nullptr && useExpressionType)
         mt = mce->method->type;
@@ -50,6 +51,8 @@ MethodInstance::resolve(const IR::MethodCallExpression* mce, DeclarationLookup* 
             else
                 BUG("Could not find type for %1%", mem->expr);
         }
+        if (auto sc = basetype->to<IR::Type_SpecializedCanonical>())
+            basetype = sc->baseType;
         if (basetype->is<IR::Type_HeaderUnion>()) {
             if (mem->member == IR::Type_Header::isValid)
                 return new BuiltInMethod(mce, mem->member, mem->expr, mt->to<IR::Type_Method>());
@@ -94,11 +97,9 @@ MethodInstance::resolve(const IR::MethodCallExpression* mce, DeclarationLookup* 
                 auto method = et->lookupMethod(mem->member, mce->arguments);
                 if (method == nullptr)
                     return nullptr;
-                // TODO: do we need to also substitute the extern instantiation type
-                // parameters into actualMethodType?
                 return new ExternMethod(mce, decl, method, et, methodType,
                                         type->to<IR::Type_Extern>(),
-                                        actualType->to<IR::Type_Method>());
+                                        actualType->to<IR::Type_Method>(), incomplete);
             }
         }
     } else if (mce->method->is<IR::PathExpression>()) {
@@ -108,14 +109,14 @@ MethodInstance::resolve(const IR::MethodCallExpression* mce, DeclarationLookup* 
             auto methodType = mt->to<IR::Type_Method>();
             CHECK_NULL(methodType);
             return new ExternFunction(mce, meth, methodType,
-                                      actualType->to<IR::Type_Method>());
+                                      actualType->to<IR::Type_Method>(), incomplete);
         } else if (auto act = decl->to<IR::P4Action>()) {
             return new ActionCall(mce, act, mt->to<IR::Type_Action>());
         } else if (auto func = decl->to<IR::Function>()) {
             auto methodType = mt->to<IR::Type_Method>();
             CHECK_NULL(methodType);
             return new FunctionCall(mce, func, methodType,
-                                    actualType->to<IR::Type_Method>());
+                                    actualType->to<IR::Type_Method>(), incomplete);
         }
     }
 
@@ -176,7 +177,7 @@ Instantiation* Instantiation::resolve(const IR::Declaration_Instance* instance,
     const IR::Vector<IR::Type>* typeArguments;
 
     if (auto st = type->to<IR::Type_SpecializedCanonical>()) {
-        simpleType = st->substituted;
+        simpleType = st->baseType;
         typeArguments = st->arguments;
     } else {
         typeArguments = new IR::Vector<IR::Type>();
@@ -215,7 +216,8 @@ std::vector<const IR::IDeclaration *> ExternMethod::mayCall() const {
                                 .getDeclaration<IR::IDeclaration>(meth->name)) {
                     rv.push_back(am);
                 } else if (!meth->getAnnotation(IR::Annotation::optionalAnnotation)) {
-                    error("No implementation for abstract %s in %s called via %s",
+                    error(ErrorType::ERR_INVALID,
+                          "No implementation for abstract %s in %s called via %s",
                           meth, di, method); } } } }
     return rv;
 }

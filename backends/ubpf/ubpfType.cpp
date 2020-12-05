@@ -48,7 +48,8 @@ namespace UBPF {
         } else if (auto tpl = type->to<IR::Type_List>()) {
             result = new UBPFListType(tpl);
         } else {
-            ::error("Type %1% not supported", type);
+            ::error(ErrorType::ERR_UNSUPPORTED_ON_TARGET,
+                    "Type %1% not supported", type);
         }
         return result;
     }
@@ -64,6 +65,19 @@ namespace UBPF {
             builder->appendFormat("uint64_t");
         else
             builder->appendFormat("uint8_t*");
+    }
+
+    cstring UBPFScalarType::getAsString() {
+        if (width <= 8)
+            return cstring("uint8_t");
+        else if (width <= 16)
+            return cstring("uint16_t");
+        else if (width <= 32)
+            return cstring("uint32_t");
+        else if (width <= 64)
+            return cstring("uint64_t");
+        else
+            return cstring("uint8_t*");
     }
 
     void UBPFScalarType::declare(EBPF::CodeBuilder *builder, cstring id, bool asPointer) {
@@ -152,7 +166,8 @@ namespace UBPF {
             auto ltype = UBPFTypeFactory::instance->create(el);
             auto wt = dynamic_cast<IHasWidth*>(ltype);
             if (wt == nullptr) {
-                ::error("UBPF: Unsupported type in Type_List: %s", el->getP4Type());
+                ::error(ErrorType::ERR_UNSUPPORTED_ON_TARGET,
+                        "UBPF: Unsupported type in Type_List: %s", el->getP4Type());
             } else {
                 width += wt->widthInBits();
                 implWidth += wt->implementationWidthInBits();
@@ -181,7 +196,8 @@ namespace UBPF {
                     elements.push_back(pad);
                     paddingIndex++;
                 } else {
-                    ::error("Not supported bitwidth in %1$", this->type->getNode());
+                    ::error(ErrorType::ERR_UNSUPPORTED_ON_TARGET,
+                            "Not supported bitwidth in %1%", this->type->getNode());
                 }
             }
             idx++;

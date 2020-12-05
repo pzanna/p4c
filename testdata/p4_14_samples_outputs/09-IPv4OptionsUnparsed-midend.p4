@@ -63,7 +63,7 @@ struct headers {
 }
 
 parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    ipv4_t_1 tmp_hdr_0;
+    @name("ParserImpl.tmp_hdr") ipv4_t_1 tmp_hdr_0;
     bit<160> tmp;
     @name(".parse_ethernet") state parse_ethernet {
         packet.extract<ethernet_t>(hdr.ethernet);
@@ -75,7 +75,6 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     }
     @name(".parse_ipv4") state parse_ipv4 {
         tmp = packet.lookahead<bit<160>>();
-        tmp_hdr_0.setValid();
         tmp_hdr_0.setValid();
         tmp_hdr_0.version = tmp[159:156];
         tmp_hdr_0.ihl = tmp[155:152];

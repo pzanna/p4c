@@ -33,12 +33,15 @@ OPTION (ENABLE_GTESTS "Enable building and running GTest unit tests" ON)
 OPTION (ENABLE_BMV2 "Build the BMV2 backend (required for the full test suite)" ON)
 OPTION (ENABLE_EBPF "Build the EBPF backend (required for the full test suite)" ON)
 OPTION (ENABLE_UBPF "Build the uBPF backend (required for the full test suite)" ON)
+OPTION (ENABLE_DPDK "Build the DPDK backend (required for the full test suite)" ON)
 OPTION (ENABLE_P4TEST "Build the P4Test backend (required for the full test suite)" ON)
 OPTION (ENABLE_P4C_GRAPHS "Build the p4c-graphs backend" ON)
 OPTION (ENABLE_PROTOBUF_STATIC "Link against Protobuf statically" ON)
 OPTION (ENABLE_GC "Use libgc" ON)
 OPTION (ENABLE_MULTITHREAD "Use multithreading" OFF)
 OPTION (ENABLE_GMP "Use GMP library" ON)
+
+set (P4C_DRIVER_NAME "p4c" CACHE STRING "Customize the name of the driver script")
 
 set(MAX_LOGGING_LEVEL 10 CACHE STRING "Control the maximum logging level for -T logs")
 set_property(CACHE MAX_LOGGING_LEVEL PROPERTY STRINGS 0 1 2 3 4 5 6 7 8 9 10)
@@ -267,6 +270,16 @@ foreach (ext ${p4c_extensions})
     endif()
   endif()
 endforeach(ext)
+
+# With the current implementation of ir-generator, all targets shares the
+# same ir-generated.h and ir-generated.cpp file, which means all targets
+# share the same set of IR classes (frontend and backend). The DPDK backend
+# introduces additional IR classes and cpp sources which need to be added to
+# EXTENSION_FRONTEND_SOURCES. We need to pupulate EXTENSION_FRONTEND_SOURCES
+# before it is added to libfrontend.a in frontends/CMakeList.txt
+if (ENABLE_DPDK)
+    add_subdirectory (backends/dpdk)
+endif ()
 
 add_subdirectory (frontends)
 add_subdirectory (midend)

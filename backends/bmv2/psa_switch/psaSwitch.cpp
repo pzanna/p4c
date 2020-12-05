@@ -203,11 +203,11 @@ void PsaProgramStructure::createActions(ConversionContext* ctxt) {
 }
 
 void PsaProgramStructure::createControls(ConversionContext* ctxt) {
-    auto cvt = new BMV2::ControlConverter(ctxt, "ingress", true);
+    auto cvt = new BMV2::ControlConverter<Standard::Arch::PSA>(ctxt, "ingress", true);
     auto ingress = pipelines.at("ingress");
     ingress->apply(*cvt);
 
-    cvt = new BMV2::ControlConverter(ctxt, "egress", true);
+    cvt = new BMV2::ControlConverter<Standard::Arch::PSA>(ctxt, "egress", true);
     auto egress = pipelines.at("egress");
     egress->apply(*cvt);
 }
@@ -248,28 +248,97 @@ bool ParsePsaArchitecture::preorder(const IR::ExternBlock* block) {
 }
 
 bool ParsePsaArchitecture::preorder(const IR::PackageBlock* block) {
-    auto pkg = block->getParameterValue("ingress");
+    auto pkg = block->findParameterValue("ingress");
+    if (pkg == nullptr) {
+        modelError("Package %1% has no parameter named 'ingress'", block);
+        return false;
+    }
     if (auto ingress = pkg->to<IR::PackageBlock>()) {
-        auto parser = ingress->getParameterValue("ip")->to<IR::ParserBlock>();
-        auto pipeline = ingress->getParameterValue("ig")->to<IR::ControlBlock>();
-        auto deparser = ingress->getParameterValue("id")->to<IR::ControlBlock>();
+        auto p = ingress->findParameterValue("ip");
+        if (p == nullptr) {
+            modelError("'ingress' package %1% has no parameter named 'ip'", block);
+            return false;
+        }
+        auto parser = p->to<IR::ParserBlock>();
+        if (parser == nullptr) {
+            modelError("%1%: 'ip' argument of 'ingress' should be bound to a parser", block);
+            return false;
+        }
+        p = ingress->findParameterValue("ig");
+        if (p == nullptr) {
+            modelError("'ingress' package %1% has no parameter named 'ig'", block);
+            return false;
+        }
+        auto pipeline = p->to<IR::ControlBlock>();
+        if (pipeline == nullptr) {
+            modelError("%1%: 'ig' argument of 'ingress' should be bound to a control", block);
+            return false;
+        }
+        p = ingress->findParameterValue("id");
+        if (p == nullptr) {
+            modelError("'ingress' package %1% has no parameter named 'id'", block);
+            return false;
+        }
+        auto deparser = p->to<IR::ControlBlock>();
+        if (deparser == nullptr) {
+            modelError("'%1%: id' argument of 'ingress' should be bound to a control", block);
+            return false;
+        }
         structure->block_type.emplace(parser->container, std::make_pair(INGRESS, PARSER));
         structure->block_type.emplace(pipeline->container, std::make_pair(INGRESS, PIPELINE));
         structure->block_type.emplace(deparser->container, std::make_pair(INGRESS, DEPARSER));
         structure->pipeline_controls.emplace(pipeline->container->name);
         structure->non_pipeline_controls.emplace(deparser->container->name);
+    } else {
+        modelError("'ingress' %1% is not bound to a package", pkg);
+        return false;
     }
-    pkg = block->getParameterValue("egress");
+    pkg = block->findParameterValue("egress");
+    if (pkg == nullptr) {
+        modelError("Package %1% has no parameter named 'egress'", block);
+        return false;
+    }
     if (auto egress = pkg->to<IR::PackageBlock>()) {
-        auto parser = egress->getParameterValue("ep")->to<IR::ParserBlock>();
-        auto pipeline = egress->getParameterValue("eg")->to<IR::ControlBlock>();
-        auto deparser = egress->getParameterValue("ed")->to<IR::ControlBlock>();
+        auto p = egress->findParameterValue("ep");
+        if (p == nullptr) {
+            modelError("'egress' package %1% has no parameter named 'ep'", block);
+            return false;
+        }
+        auto parser = p->to<IR::ParserBlock>();
+        if (parser == nullptr) {
+            modelError("%1%: 'ep' argument of 'egress' should be bound to a parser", block);
+            return false;
+        }
+        p = egress->findParameterValue("eg");
+        if (p == nullptr) {
+            modelError("'egress' package %1% has no parameter named 'eg'", block);
+            return false;
+        }
+        auto pipeline = p->to<IR::ControlBlock>();
+        if (pipeline == nullptr) {
+            modelError("%1%: 'ig' argument of 'egress' should be bound to a control", block);
+            return false;
+        }
+        p = egress->findParameterValue("ed");
+        if (p == nullptr) {
+            modelError("'egress' package %1% has no parameter named 'ed'", block);
+            return false;
+        }
+        auto deparser = p->to<IR::ControlBlock>();
+        if (deparser == nullptr) {
+            modelError("%1%: 'ed' argument of 'egress' should be bound to a control", block);
+            return false;
+        }
         structure->block_type.emplace(parser->container, std::make_pair(EGRESS, PARSER));
         structure->block_type.emplace(pipeline->container, std::make_pair(EGRESS, PIPELINE));
         structure->block_type.emplace(deparser->container, std::make_pair(EGRESS, DEPARSER));
         structure->pipeline_controls.emplace(pipeline->container->name);
         structure->non_pipeline_controls.emplace(deparser->container->name);
+    } else {
+        modelError("'egress' is not bound to a package", pkg);
+        return false;
     }
+
     return false;
 }
 
@@ -514,8 +583,7 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
         new P4::ClonePathExpressions(),
         new P4::ClearTypeMap(typeMap),
         evaluator,
-        new VisitFunctor([this, evaluator, structure]() {
-            toplevel = evaluator->getToplevelBlock(); }),
+        [this, evaluator, structure]() { toplevel = evaluator->getToplevelBlock(); },
     };
     auto hook = options.getDebugHook();
     simplify.addDebugHook(hook);
@@ -527,6 +595,8 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
     main = toplevel->getMain();
     if (!main) return;  // no main
     main->apply(*parsePsaArch);
+    if (::errorCount() > 0)
+        return;
     program = toplevel->getProgram();
 
     PassManager toJson = {
@@ -619,21 +689,24 @@ Util::IJson* ExternConverter_Meter::convertExternObject(
     UNUSED ConversionContext* ctxt, UNUSED const P4::ExternMethod* em,
     UNUSED const IR::MethodCallExpression* mc, UNUSED const IR::StatOrDecl *s,
     UNUSED const bool& emitExterns) {
-    if (mc->arguments->size() != 2) {
+    if (mc->arguments->size() != 1 && mc->arguments->size() != 2) {
         modelError("Expected 2 arguments for %1%", mc);
         return nullptr;
     }
-    auto primitive = mkPrimitive("execute_meter");
+    auto primitive = mkPrimitive("_" + em->originalExternType->name +
+                                 "_" + em->method->name);
     auto parameters = mkParameters(primitive);
     primitive->emplace_non_null("source_info", s->sourceInfoJsonObj());
     auto mtr = new Util::JsonObject();
-    mtr->emplace("type", "meter_array");
+    mtr->emplace("type", "extern");
     mtr->emplace("value", em->object->controlPlaneName());
     parameters->append(mtr);
+    if (mc->arguments->size() == 2) {
+        auto result = ctxt->conv->convert(mc->arguments->at(1)->expression);
+        parameters->append(result);
+    }
     auto index = ctxt->conv->convert(mc->arguments->at(0)->expression);
     parameters->append(index);
-    auto result = ctxt->conv->convert(mc->arguments->at(1)->expression);
-    parameters->append(result);
     return primitive;
 }
 
@@ -771,22 +844,23 @@ void ExternConverter_Counter::convertExternInstance(
     UNUSED const IR::ExternBlock* eb, UNUSED const bool& emitExterns) {
     auto inst = c->to<IR::Declaration_Instance>();
     cstring name = inst->controlPlaneName();
-    auto jctr = new Util::JsonObject();
-    jctr->emplace("name", name);
-    jctr->emplace("id", nextId("counter_arrays"));
-    jctr->emplace_non_null("source_info", eb->sourceInfoJsonObj());
     auto sz = eb->findParameterValue("n_counters");
     CHECK_NULL(sz);
     if (!sz->is<IR::Constant>()) {
         modelError("%1%: expected a constant", sz->getNode());
         return;
     }
+
+    // adding counter instance to counter_arrays[]
+    auto jctr = new Util::JsonObject();
+    jctr->emplace("name", name);
+    jctr->emplace("id", nextId("counter_arrays"));
+    jctr->emplace_non_null("source_info", eb->sourceInfoJsonObj());
     jctr->emplace("size", sz->to<IR::Constant>()->value);
     jctr->emplace("is_direct", false);
     ctxt->json->counters->append(jctr);
 
-    // Code below used to add json into EXTERN_INSTANCES NODE
-
+    // add counter instance to extern_instances
     auto extern_obj = new Util::JsonObject();
     extern_obj->emplace("name", name);
     extern_obj->emplace("id", nextId("extern_instances"));
@@ -877,21 +951,57 @@ void ExternConverter_DirectCounter::convertExternInstance(
 void ExternConverter_Meter::convertExternInstance(
     UNUSED ConversionContext* ctxt, UNUSED const IR::Declaration* c,
     UNUSED const IR::ExternBlock* eb, UNUSED const bool& emitExterns) {
+    if (eb->getConstructorParameters()->size() != 2) {
+      modelError("%1%: expected two parameters", eb);
+      return;
+    }
+
     auto inst = c->to<IR::Declaration_Instance>();
     cstring name = inst->controlPlaneName();
-    auto jmtr = new Util::JsonObject();
-    jmtr->emplace("name", name);
-    jmtr->emplace("id", nextId("meter_arrays"));
-    jmtr->emplace_non_null("source_info", eb->sourceInfoJsonObj());
-    jmtr->emplace("is_direct", false);
+
+    // adding meter instance into extern_instances
+    auto jext_mtr = new Util::JsonObject();
+    jext_mtr->emplace("name", name);
+    jext_mtr->emplace("id", nextId("extern_instances"));
+    jext_mtr->emplace("type", eb->getName());
+    jext_mtr->emplace_non_null("source_info", eb->sourceInfoJsonObj());
+    ctxt->json->externs->append(jext_mtr);
+
+    // adding attributes to meter extern_instance
+    Util::JsonArray *arr = ctxt->json->insert_array_field(jext_mtr, "attribute_values");
+
+    // is_direct
+    auto is_direct = new Util::JsonObject();
+    is_direct->emplace("name", "is_direct");
+    is_direct->emplace("type", "hexstr");
+    is_direct->emplace("value", 0);
+    arr->append(is_direct);
+
+    // meter_array size
     auto sz = eb->findParameterValue("n_meters");
     CHECK_NULL(sz);
     if (!sz->is<IR::Constant>()) {
         modelError("%1%: expected a constant", sz->getNode());
         return;
     }
-    jmtr->emplace("size", sz->to<IR::Constant>()->value);
-    jmtr->emplace("rate_count", 2);
+    auto attr_name = eb->getConstructorParameters()->getParameter(0);
+    auto s = sz->to<IR::Constant>();
+    auto bitwidth = ctxt->typeMap->minWidthBits(s->type, sz->getNode());
+    cstring val = BMV2::stringRepr(s->value, ROUNDUP(bitwidth, 8));
+    auto msz = new Util::JsonObject();
+    msz->emplace("name", attr_name->toString());
+    msz->emplace("type", "hexstr");
+    msz->emplace("value", val);
+    arr->append(msz);
+
+    // rate count
+    auto rc = new Util::JsonObject();
+    rc->emplace("name", "rate_count");
+    rc->emplace("type", "hexstr");
+    rc->emplace("value", 2);
+    arr->append(rc);
+
+    // meter kind
     auto mkind = eb->findParameterValue("type");
     CHECK_NULL(mkind);
     if (!mkind->is<IR::Declaration_ID>()) {
@@ -906,8 +1016,11 @@ void ExternConverter_Meter::convertExternInstance(
         type = "bytes";
     else
         ::error(ErrorType::ERR_UNEXPECTED, "%1%: unexpected meter type", mkind->getNode());
-    jmtr->emplace("type", type);
-    ctxt->json->meter_arrays->append(jmtr);
+    auto k = new Util::JsonObject();
+    k->emplace("name", "type");
+    k->emplace("type", "string");
+    k->emplace("value", type);
+    arr->append(k);
 }
 
 void ExternConverter_DirectMeter::convertExternInstance(
@@ -1017,6 +1130,9 @@ void ExternConverter_ActionProfile::convertExternInstance(
     action_profile->emplace_non_null("source_info", eb->sourceInfoJsonObj());
 
     auto sz = eb->findParameterValue("size");
+    BUG_CHECK(sz, "%1%Invalid declaration of extern ActionProfile ctor: no size param",
+              eb->constructor->srcInfo);
+
     if (!sz->is<IR::Constant>()) {
         ::error(ErrorType::ERR_EXPECTED, "%1%: expected a constant", sz);
     }
@@ -1040,6 +1156,8 @@ void ExternConverter_ActionSelector::convertExternInstance(
     action_profile->emplace_non_null("source_info", eb->sourceInfoJsonObj());
 
     auto sz = eb->findParameterValue("size");
+    BUG_CHECK(sz, "%1%Invalid declaration of extern ActionSelector: no size param",
+              eb->constructor->srcInfo);
     if (!sz->is<IR::Constant>()) {
         ::error(ErrorType::ERR_EXPECTED, "%1%: expected a constant", sz);
         return;
@@ -1055,7 +1173,7 @@ void ExternConverter_ActionSelector::convertExternInstance(
     }
     auto algo = ExternConverter::convertHashAlgorithm(hash->to<IR::Declaration_ID>()->name);
     selector->emplace("algo", algo);
-    auto input = ctxt->selector_check->get_selector_input(
+    auto input = ctxt->get_selector_input(
         c->to<IR::Declaration_Instance>());
     if (input == nullptr) {
         // the selector is never used by any table, we cannot figure out its

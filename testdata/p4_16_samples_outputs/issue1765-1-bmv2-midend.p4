@@ -171,11 +171,11 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 }
 
 struct tuple_0 {
-    bit<128> field;
-    bit<128> field_0;
-    bit<32>  field_1;
-    bit<24>  field_2;
-    bit<8>   field_3;
+    bit<128> f0;
+    bit<128> f1;
+    bit<32>  f2;
+    bit<24>  f3;
+    bit<8>   f4;
 }
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
@@ -185,8 +185,8 @@ control MyComputeChecksum(inout headers hdr, inout metadata meta) {
 }
 
 control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    mac_addr_t mac_tmp_0;
-    ipv6_addr_t addr_tmp_0;
+    @name("MyIngress.mac_tmp") mac_addr_t mac_tmp_0;
+    @name("MyIngress.addr_tmp") ipv6_addr_t addr_tmp_0;
     @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @noWarn("unused") @name(".NoAction") action NoAction_4() {

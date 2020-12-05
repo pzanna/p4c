@@ -202,18 +202,18 @@ struct parsed_headers_t {
 }
 
 struct tuple_0 {
-    bit<4>  field;
-    bit<4>  field_0;
-    bit<6>  field_1;
-    bit<2>  field_2;
-    bit<16> field_3;
-    bit<16> field_4;
-    bit<3>  field_5;
-    bit<13> field_6;
-    bit<8>  field_7;
-    bit<8>  field_8;
-    bit<32> field_9;
-    bit<32> field_10;
+    bit<4>  f0;
+    bit<4>  f1;
+    bit<6>  f2;
+    bit<2>  f3;
+    bit<16> f4;
+    bit<16> f5;
+    bit<3>  f6;
+    bit<13> f7;
+    bit<8>  f8;
+    bit<8>  f9;
+    bit<32> f10;
+    bit<32> f11;
 }
 
 control FabricComputeChecksum(inout parsed_headers_t hdr, inout fabric_metadata_t meta) {
@@ -230,7 +230,7 @@ control FabricVerifyChecksum(inout parsed_headers_t hdr, inout fabric_metadata_t
 }
 
 parser FabricParser(packet_in packet, out parsed_headers_t hdr, inout fabric_metadata_t fabric_metadata, inout standard_metadata_t standard_metadata) {
-    bit<4> tmp;
+    @name("FabricParser.tmp_0") bit<4> tmp_0;
     state start {
         transition select(standard_metadata.ingress_port) {
             9w255: parse_packet_out;
@@ -273,8 +273,8 @@ parser FabricParser(packet_in packet, out parsed_headers_t hdr, inout fabric_met
         packet.extract<mpls_t>(hdr.mpls);
         fabric_metadata._mpls_label5 = hdr.mpls.label;
         fabric_metadata._mpls_ttl6 = hdr.mpls.ttl;
-        tmp = packet.lookahead<bit<4>>();
-        transition select(tmp) {
+        tmp_0 = packet.lookahead<bit<4>>();
+        transition select(tmp_0) {
             4w4: parse_ipv4;
             default: parse_ethernet;
         }
@@ -352,8 +352,8 @@ control FabricDeparser(packet_out packet, in parsed_headers_t hdr) {
 
 control FabricIngress(inout parsed_headers_t hdr, inout fabric_metadata_t fabric_metadata, inout standard_metadata_t standard_metadata) {
     bool hasExited;
-    bool spgw_normalizer_hasReturned;
-    bool spgw_ingress_hasReturned;
+    @name("FabricIngress.spgw_normalizer.hasReturned") bool spgw_normalizer_hasReturned;
+    @name("FabricIngress.spgw_ingress.hasReturned_0") bool spgw_ingress_hasReturned;
     @name(".nop") action nop() {
     }
     @name(".nop") action nop_0() {
@@ -856,7 +856,7 @@ control FabricIngress(inout parsed_headers_t hdr, inout fabric_metadata_t fabric
             if (!spgw_ingress_hasReturned) {
                 tbl_spgw175.apply();
             }
-            if (fabric_metadata._skip_forwarding7 == false) {
+            if (!fabric_metadata._skip_forwarding7) {
                 if (fabric_metadata._fwd_type9 == 3w0) {
                     forwarding_bridging.apply();
                 } else if (fabric_metadata._fwd_type9 == 3w1) {
@@ -866,7 +866,7 @@ control FabricIngress(inout parsed_headers_t hdr, inout fabric_metadata_t fabric
                 }
             }
             acl_acl.apply();
-            if (fabric_metadata._skip_next8 == false) {
+            if (!fabric_metadata._skip_next8) {
                 next_xconnect.apply();
                 next_hashed.apply();
                 next_multicast.apply();
@@ -1065,19 +1065,19 @@ control FabricEgress(inout parsed_headers_t hdr, inout fabric_metadata_t fabric_
     }
     apply {
         tbl_act_0.apply();
-        if (fabric_metadata._is_controller_packet_out12 == true) {
+        if (fabric_metadata._is_controller_packet_out12) {
             tbl_packetio41.apply();
         }
         if (!hasExited_0) {
             if (standard_metadata.egress_port == 9w255) {
-                if (fabric_metadata._is_multicast11 == true && fabric_metadata._clone_to_cpu13 == false) {
+                if (fabric_metadata._is_multicast11 && !fabric_metadata._clone_to_cpu13) {
                     tbl_packetio47.apply();
                 }
                 tbl_packetio49.apply();
             }
         }
         if (!hasExited_0) {
-            if (fabric_metadata._is_multicast11 == true && standard_metadata.ingress_port == standard_metadata.egress_port) {
+            if (fabric_metadata._is_multicast11 && standard_metadata.ingress_port == standard_metadata.egress_port) {
                 tbl_next308.apply();
             }
             if (fabric_metadata._mpls_label5 == 20w0) {

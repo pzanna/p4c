@@ -39,15 +39,14 @@ StorageLocation* StorageFactory::create(const IR::Type* type, cstring name) cons
         // Since we don't have any operations except assignment for a
         // type described by a type variable, we treat is as a base type.
         type->is<IR::Type_Var>() ||
-        // Similarly for tuples.  This may need to be revisited if we
-        // add tuple field accessors.
+        // The following may need to be revisited when we add tuple
+        // field accessors.
         type->is<IR::Type_Tuple>() ||
+        type->is<IR::Type_List>() ||
         // Also for newtype
         type->is<IR::Type_Newtype>())
         return new BaseLocation(type, name);
-    if (type->is<IR::Type_StructLike>()) {
-        type = typeMap->getTypeType(type, true);  // get the canonical version
-        auto st = type->to<IR::Type_StructLike>();
+    if (auto st = type->to<IR::Type_StructLike>()) {
         auto result = new StructLocation(type, name);
 
         // For header unions we will model all of the valid fields
@@ -71,10 +70,7 @@ StorageLocation* StorageFactory::create(const IR::Type* type, cstring name) cons
             result->addField(validFieldName, valid);
         }
         return result;
-    }
-    if (type->is<IR::Type_Stack>()) {
-        type = typeMap->getTypeType(type, true);  // get the canonical version
-        auto st = type->to<IR::Type_Stack>();
+    } else if (auto st = type->to<IR::Type_Stack>()) {
         auto result = new ArrayLocation(st, name);
         for (unsigned i = 0; i < st->getSize(); i++) {
             auto sl = create(st->elementType, name + "[" + Util::toString(i) + "]");
@@ -415,7 +411,6 @@ void ComputeWriteSet::enterScope(const IR::ParameterList* parameters,
     }
     allDefinitions->setDefinitionsAt(entryPoint, defs, false);
     currentDefinitions = defs;
-    LOG3("Definitions at " << entryPoint << ":" << currentDefinitions);
 }
 
 void ComputeWriteSet::exitScope(const IR::ParameterList* parameters,
@@ -469,7 +464,7 @@ bool ComputeWriteSet::setDefinitions(Definitions* defs, const IR::Node* node, bo
     if (findContext<IR::ParserState>())
         overwrite = true;
     allDefinitions->setDefinitionsAt(point, currentDefinitions, overwrite);
-    LOG3("CWS Definitions at " << point << " are " << std::endl << defs);
+    LOG3("CWS Definitions at " << point << " are " << IndentCtl::endl << defs);
     return false;  // always returns false
 }
 
@@ -678,7 +673,8 @@ bool ComputeWriteSet::preorder(const IR::MethodCallExpression* expression) {
         // symbolically call all the methods that might be called via this extern method
         callees = em->mayCall(); }
     if (!callees.empty()) {
-        LOG3("Analyzing callees of " << expression << DBPrint::Brief << callees << DBPrint::Reset);
+        LOG3("Analyzing callees of " << expression << DBPrint::Brief << callees <<
+             DBPrint::Reset << IndentCtl::indent);
         ProgramPoint pt(callingContext, expression);
         ComputeWriteSet cw(this, pt, currentDefinitions);
         for (auto c : callees)
@@ -686,7 +682,7 @@ bool ComputeWriteSet::preorder(const IR::MethodCallExpression* expression) {
         currentDefinitions = cw.currentDefinitions;
         exitDefinitions = exitDefinitions->joinDefinitions(cw.exitDefinitions);
         LOG3("Definitions after call of " << DBPrint::Brief << expression << ": " <<
-             currentDefinitions << DBPrint::Reset);
+             currentDefinitions << DBPrint::Reset << IndentCtl::unindent);
     }
 
     auto result = LocationSet::empty;
@@ -863,12 +859,17 @@ bool ComputeWriteSet::preorder(const IR::SwitchStatement* statement) {
     }
     auto table = TableApplySolver::isActionRun(
         statement->expression, storageMap->refMap, storageMap->typeMap);
-    CHECK_NULL(table);
-    auto al = table->getActionList();
-    bool allCases = statement->cases.size() == al->size();
-    if (!seenDefault && !allCases)
-        // no case may have been executed
+    if (table) {
+        auto al = table->getActionList();
+        bool allCases = statement->cases.size() == al->size();
+        if (!seenDefault && !allCases)
+            // no case may have been executed
+            result = result->joinDefinitions(save);
+    } else {
+        // TODO: in some cases we can check for exhaustive matches,
+        // but this is conservative.
         result = result->joinDefinitions(save);
+    }
     return setDefinitions(result);
 }
 
@@ -972,12 +973,12 @@ bool ComputeWriteSet::preorder(const IR::MethodCallStatement* statement) {
 }  // namespace P4
 
 // functions for calling from gdb
-void dump(const P4::StorageLocation *s) { std::cout << *s << std::endl; }
-void dump(const P4::StorageMap *s) { std::cout << *s << std::endl; }
-void dump(const P4::LocationSet *s) { std::cout << *s << std::endl; }
-void dump(const P4::ProgramPoint *p) { std::cout << *p << std::endl; }
-void dump(const P4::ProgramPoint &p) { std::cout << p << std::endl; }
-void dump(const P4::ProgramPoints *p) { std::cout << *p << std::endl; }
-void dump(const P4::ProgramPoints &p) { std::cout << p << std::endl; }
-void dump(const P4::Definitions *d) { std::cout << *d << std::endl; }
-void dump(const P4::AllDefinitions *d) { std::cout << *d << std::endl; }
+void dump(const P4::StorageLocation *s) { std::cout << *s << IndentCtl::endl; }
+void dump(const P4::StorageMap *s) { std::cout << *s << IndentCtl::endl; }
+void dump(const P4::LocationSet *s) { std::cout << *s << IndentCtl::endl; }
+void dump(const P4::ProgramPoint *p) { std::cout << *p << IndentCtl::endl; }
+void dump(const P4::ProgramPoint &p) { std::cout << p << IndentCtl::endl; }
+void dump(const P4::ProgramPoints *p) { std::cout << *p << IndentCtl::endl; }
+void dump(const P4::ProgramPoints &p) { std::cout << p << IndentCtl::endl; }
+void dump(const P4::Definitions *d) { std::cout << *d << IndentCtl::endl; }
+void dump(const P4::AllDefinitions *d) { std::cout << *d << IndentCtl::endl; }

@@ -77,9 +77,9 @@ struct headers {
 }
 
 parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    ipv4_option_timestamp_t_1 tmp_hdr_0;
-    bit<8> tmp;
-    bit<16> tmp_0;
+    @name("ParserImpl.tmp_hdr") ipv4_option_timestamp_t_1 tmp_hdr_0;
+    @name("ParserImpl.tmp_1") bit<8> tmp_1;
+    bit<16> tmp_2;
     @name(".parse_ethernet") state parse_ethernet {
         packet.extract<ethernet_t>(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
@@ -111,18 +111,17 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
         transition parse_ipv4_options;
     }
     @name(".parse_ipv4_option_timestamp") state parse_ipv4_option_timestamp {
-        tmp_0 = packet.lookahead<bit<16>>();
+        tmp_2 = packet.lookahead<bit<16>>();
         tmp_hdr_0.setValid();
-        tmp_hdr_0.setValid();
-        tmp_hdr_0.value = tmp_0[15:8];
-        tmp_hdr_0.len = tmp_0[7:0];
-        packet.extract<ipv4_option_timestamp_t>(hdr.ipv4_option_timestamp, ((bit<32>)tmp_0[7:0] << 3) + 32w4294967280);
+        tmp_hdr_0.value = tmp_2[15:8];
+        tmp_hdr_0.len = tmp_2[7:0];
+        packet.extract<ipv4_option_timestamp_t>(hdr.ipv4_option_timestamp, ((bit<32>)tmp_2[7:0] << 3) + 32w4294967280);
         meta._my_metadata_parse_ipv4_counter0 = meta._my_metadata_parse_ipv4_counter0 - hdr.ipv4_option_timestamp.len;
         transition parse_ipv4_options;
     }
     @name(".parse_ipv4_options") state parse_ipv4_options {
-        tmp = packet.lookahead<bit<8>>();
-        transition select(meta._my_metadata_parse_ipv4_counter0, tmp) {
+        tmp_1 = packet.lookahead<bit<8>>();
+        transition select(meta._my_metadata_parse_ipv4_counter0, tmp_1) {
             (8w0x0 &&& 8w0xff, 8w0x0 &&& 8w0x0): accept;
             (8w0x0 &&& 8w0x0, 8w0x0 &&& 8w0xff): parse_ipv4_option_EOL;
             (8w0x0 &&& 8w0x0, 8w0x1 &&& 8w0xff): parse_ipv4_option_NOP;
@@ -211,20 +210,20 @@ control verifyChecksum(inout headers hdr, inout metadata meta) {
 }
 
 struct tuple_0 {
-    bit<4>                  field;
-    bit<4>                  field_0;
-    bit<8>                  field_1;
-    bit<16>                 field_2;
-    bit<16>                 field_3;
-    bit<3>                  field_4;
-    bit<13>                 field_5;
-    bit<8>                  field_6;
-    bit<8>                  field_7;
-    bit<32>                 field_8;
-    bit<32>                 field_9;
-    ipv4_option_security_t  field_10;
-    ipv4_option_NOP_t       field_11;
-    ipv4_option_timestamp_t field_12;
+    bit<4>                  f0;
+    bit<4>                  f1;
+    bit<8>                  f2;
+    bit<16>                 f3;
+    bit<16>                 f4;
+    bit<3>                  f5;
+    bit<13>                 f6;
+    bit<8>                  f7;
+    bit<8>                  f8;
+    bit<32>                 f9;
+    bit<32>                 f10;
+    ipv4_option_security_t  f11;
+    ipv4_option_NOP_t       f12;
+    ipv4_option_timestamp_t f13;
 }
 
 control computeChecksum(inout headers hdr, inout metadata meta) {

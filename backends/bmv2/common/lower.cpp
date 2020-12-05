@@ -108,9 +108,11 @@ const IR::Node* LowerExpressions::postorder(IR::Slice* expression) {
     typeMap->setType(result, type);
 
     // Signedness conversion.
-    type = IR::Type_Bits::get(h - l + 1, false);
-    result = new IR::Cast(expression->srcInfo, type, result);
-    typeMap->setType(result, type);
+    if (type->isSigned) {
+        type = IR::Type_Bits::get(h - l + 1, false);
+        result = new IR::Cast(expression->srcInfo, type, result);
+        typeMap->setType(result, type);
+    }
 
     LOG3("Replaced " << expression << " with " << result);
     return result;
@@ -211,7 +213,7 @@ RemoveComplexExpressions::simplifyExpression(const IR::Expression* expression, b
         auto simpl = simplifyExpressions(&si->components);
         if (simpl != &si->components)
             return new IR::StructExpression(
-                si->srcInfo, si->typeName, si->typeName, *simpl);
+                si->srcInfo, si->structType, si->structType, *simpl);
         return expression;
     } else {
         ComplexExpression ce;
@@ -316,7 +318,7 @@ RemoveComplexExpressions::postorder(IR::MethodCallExpression* expression) {
             } else if (auto si = arg1->to<IR::StructExpression>()) {
                 auto list = simplifyExpressions(&si->components);
                 arg1 = new IR::StructExpression(
-                    si->srcInfo, si->typeName, si->typeName, *list);
+                    si->srcInfo, si->structType, si->structType, *list);
                 vec->push_back(new IR::Argument(arg1));
             } else {
                 auto tmp = new IR::Argument(

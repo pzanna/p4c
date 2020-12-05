@@ -34,6 +34,7 @@ limitations under the License.
 #include "midend/eliminateTuples.h"
 #include "midend/eliminateNewtype.h"
 #include "midend/eliminateSerEnums.h"
+#include "midend/eliminateSwitch.h"
 #include "midend/flattenHeaders.h"
 #include "midend/flattenInterfaceStructs.h"
 #include "midend/replaceSelectRange.h"
@@ -68,7 +69,7 @@ class SkipControls : public P4::ActionSynthesisPolicy {
     }
 };
 
-MidEnd::MidEnd(CompilerOptions& options) {
+MidEnd::MidEnd(CompilerOptions& options, std::ostream* outStream) {
     bool isv1 = options.langVersion == CompilerOptions::FrontendVersion::P4_14;
     refMap.setIsV1(isv1);
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
@@ -108,12 +109,14 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::ConstantFolding(&refMap, &typeMap),
         new P4::LocalCopyPropagation(&refMap, &typeMap),
         new P4::ConstantFolding(&refMap, &typeMap),
+        new P4::StrengthReduction(&refMap, &typeMap),
         new P4::MoveDeclarations(),  // more may have been introduced
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::CompileTimeOperations(),
         new P4::TableHit(&refMap, &typeMap),
+        new P4::EliminateSwitch(&refMap, &typeMap),
         evaluator,
-        new VisitFunctor([v1controls, evaluator](const IR::Node *root) -> const IR::Node * {
+        [v1controls, evaluator](const IR::Node *root) -> const IR::Node * {
             auto toplevel = evaluator->getToplevelBlock();
             auto main = toplevel->getMain();
             if (main == nullptr)
@@ -136,13 +139,21 @@ MidEnd::MidEnd(CompilerOptions& options) {
                 v1controls->emplace(update->to<IR::ControlBlock>()->container->name);
                 v1controls->emplace(deparser->to<IR::ControlBlock>()->container->name);
             }
-            return root; }),
+            return root; },
         new P4::SynthesizeActions(&refMap, &typeMap, new SkipControls(v1controls)),
         new P4::MoveActionsToTables(&refMap, &typeMap),
         evaluator,
-        new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); }),
+        [this, evaluator]() { toplevel = evaluator->getToplevelBlock(); },
         new P4::MidEndLast()
     });
+    if (options.listMidendPasses) {
+        listPasses(*outStream, "\n");
+        *outStream << std::endl;
+        return;
+    }
+    if (options.excludeMidendPasses) {
+        removePasses(options.passesToExcludeMidend);
+    }
 }
 
 }  // namespace P4Test

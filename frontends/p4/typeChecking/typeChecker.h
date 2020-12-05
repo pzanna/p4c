@@ -29,17 +29,22 @@ limitations under the License.
 
 namespace P4 {
 
-// This pass only clears the typeMap if the program has changed.
+// This pass only clears the typeMap if the program has changed
+// or the 'force' flag is set.
 // This is needed if the types of some objects in the program change.
 class ClearTypeMap : public Inspector {
     TypeMap* typeMap;
+    bool     force;
  public:
-    explicit ClearTypeMap(TypeMap* typeMap) :
-            typeMap(typeMap) { CHECK_NULL(typeMap); }
+    explicit ClearTypeMap(TypeMap* typeMap, bool force = false) :
+            typeMap(typeMap), force(force) { CHECK_NULL(typeMap); }
     bool preorder(const IR::P4Program* program) override {
         // Clear map only if program has not changed from last time
-        // otherwise we can reuse it
-        if (!typeMap->checkMap(program))
+        // otherwise we can reuse it.  The 'force' flag is needed
+        // because the program is saved only *after* typechecking,
+        // so if the program changes during type-checking, the
+        // typeMap may not be complete.
+        if (force || !typeMap->checkMap(program))
             typeMap->clear();
         return false;  // prune()
     }
@@ -97,7 +102,8 @@ class TypeInference : public Transform {
     /// Populates the typeMap with values for the type variables.
     TypeVariableSubstitution* unify(
         const IR::Node* errorPosition, const IR::Type* destType,
-        const IR::Type* srcType);
+        const IR::Type* srcType,
+        cstring errorFormat = nullptr, std::initializer_list<const IR::Node*> errorArgs = {});
 
     /** Tries to assign sourceExpression to a destination with type destType.
         This may rewrite the sourceExpression, in particular converting InfInt values
@@ -105,10 +111,9 @@ class TypeInference : public Transform {
         @returns new sourceExpression. */
     const IR::Expression* assignment(const IR::Node* errorPosition, const IR::Type* destType,
                                      const IR::Expression* sourceExpression);
-    const IR::SelectCase* matchCase(const IR::SelectExpression* select,
-                                    const IR::Type_BaseList* selectType,
-                                    const IR::SelectCase* selectCase,
-                                    const IR::Type* caseType);
+    const IR::SelectCase* matchCase(
+        const IR::SelectExpression* select, const IR::Type_BaseList* selectType,
+        const IR::SelectCase* selectCase, const IR::Type* caseType);
     bool canCastBetween(const IR::Type* dest, const IR::Type* src) const;
     bool checkAbstractMethods(const IR::Declaration_Instance* inst, const IR::Type_Extern* type);
     void addSubstitutions(const TypeVariableSubstitution* tvs);
@@ -181,6 +186,15 @@ class TypeInference : public Transform {
     { return pruneIfDone(expression); }
     const IR::Node* preorder(IR::Type* type) override
     { return pruneIfDone(type); }
+
+    struct Comparison {
+        const IR::Expression* left;
+        const IR::Expression* right;
+    };
+
+    // Helper function to handle comparisons
+    bool compare(const IR::Node* errorPosition, const IR::Type* ltype,
+                 const IR::Type* rtype, Comparison* compare);
 
     // do functions pre-order so we can check the prototype
     // before the returns

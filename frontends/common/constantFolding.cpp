@@ -159,6 +159,16 @@ const IR::Node* DoConstantFolding::postorder(IR::Declaration_Constant* d) {
         if (init != d->initializer)
             d = new IR::Declaration_Constant(d->srcInfo, d->name, d->annotations, d->type, init);
     }
+    if (!typesKnown && (init->is<IR::StructExpression>() ||
+                        // If we substitute structs before type checking we may lose casts
+                        // e.g. struct S { bit<8> x; }
+                        // const S s = { x = 1024 };
+                        // const bit<16> z = (bit<16>)s.x;
+                        // If we substitute this too early we may get a value of 1024 for z.
+                        init->is<IR::Cast>()))
+                        // Also, note that early in the compilation some struct expressions may
+                        // still be represented as cast expressions that cast to a struct type.
+        return d;
     LOG3("Constant " << d << " set to " << init);
     constants.emplace(getOriginal<IR::Declaration_Constant>(), init);
     return d;
@@ -515,11 +525,20 @@ const IR::Node* DoConstantFolding::postorder(IR::LOr* e) {
     return new IR::BoolLiteral(left->srcInfo, true);
 }
 
+static bool overflowWidth(const IR::Node* node, int width) {
+    if (width > P4CConfiguration::MaximumWidthSupported) {
+        ::error(ErrorType::ERR_UNSUPPORTED, "%1%: Compiler only supports widths up to %2%",
+                node, P4CConfiguration::MaximumWidthSupported);
+        return true;
+    }
+    return false;
+}
+
 const IR::Node* DoConstantFolding::postorder(IR::Slice* e) {
     const IR::Expression* msb = getConstant(e->e1);
     const IR::Expression* lsb = getConstant(e->e2);
     if (msb == nullptr || lsb == nullptr) {
-        ::error(ErrorType::ERR_EXPECTED, "%1%: bit indexes must be compile-time constants", e);
+        ::error(ErrorType::ERR_EXPECTED, "%1%: bit indices must be compile-time constants", e);
         return e;
     }
 
@@ -550,12 +569,8 @@ const IR::Node* DoConstantFolding::postorder(IR::Slice* e) {
                 "%1%: bit slicing should be specified as [msb:lsb]", e);
         return e;
     }
-    if (m > P4CConfiguration::MaximumWidthSupported ||
-        l > P4CConfiguration::MaximumWidthSupported) {
-        ::error(ErrorType::ERR_UNSUPPORTED, "%1%: Compiler only supports widths up to %2%",
-                e, P4CConfiguration::MaximumWidthSupported);
+    if (overflowWidth(e, m) || overflowWidth(e, l))
         return e;
-    }
     big_int value = cbase->value >> l;
     big_int mask = 1;
     mask = (mask << (m - l + 1)) - 1;
@@ -571,7 +586,7 @@ const IR::Node* DoConstantFolding::postorder(IR::Member* e) {
     auto type = typeMap->getType(orig->expr, true);
     auto origtype = typeMap->getType(orig);
 
-    const IR::Expression* result;
+    const IR::Expression* result = e;
     if (type->is<IR::Type_Stack>() && e->member == IR::Type_Stack::arraySize) {
         auto st = type->to<IR::Type_Stack>();
         auto size = st->getSize();
@@ -580,31 +595,42 @@ const IR::Node* DoConstantFolding::postorder(IR::Member* e) {
         auto expr = getConstant(e->expr);
         if (expr == nullptr)
             return e;
-        auto structType = type->to<IR::Type_StructLike>();
-        if (structType == nullptr)
-            BUG("Expected a struct type, got %1%", type);
-        if (auto list = expr->to<IR::ListExpression>()) {
-            bool found = false;
-            int index = 0;
-            for (auto f : structType->fields) {
-                if (f->name.name == e->member.name) {
-                    found = true;
-                    break;
-                }
-                index++;
-            }
 
-            if (!found)
-                BUG("Could not find field %1% in type %2%", e->member, type);
-            result = CloneConstants::clone(list->components.at(index));
-        } else if (auto si = expr->to<IR::StructExpression>()) {
-            if (origtype->is<IR::Type_Header>() && e->member.name == IR::Type_Header::isValid)
+        if (auto tt = type->to<IR::Type_Tuple>()) {
+            int index = tt->fieldNameValid(e->member);
+            if (index < 0)
                 return e;
-            auto ne = si->components.getDeclaration<IR::NamedExpression>(e->member.name);
-            BUG_CHECK(ne != nullptr, "Could not find field %1% in initializer %2%", e->member, si);
-            return CloneConstants::clone(ne->expression);
+            if (auto list = expr->to<IR::ListExpression>()) {
+                result = CloneConstants::clone(list->components.at(static_cast<size_t>(index)));
+            }
         } else {
-            BUG("Unexpected initializer: %1%", expr);
+            auto structType = type->to<IR::Type_StructLike>();
+            if (structType == nullptr)
+                BUG("Expected a struct type, got %1%", type);
+            if (auto list = expr->to<IR::ListExpression>()) {
+                bool found = false;
+                int index = 0;
+                for (auto f : structType->fields) {
+                    if (f->name.name == e->member.name) {
+                        found = true;
+                        break;
+                    }
+                    index++;
+                }
+
+                if (!found)
+                    BUG("Could not find field %1% in type %2%", e->member, type);
+                result = CloneConstants::clone(list->components.at(index));
+            } else if (auto si = expr->to<IR::StructExpression>()) {
+                if (origtype->is<IR::Type_Header>() && e->member.name == IR::Type_Header::isValid)
+                    return e;
+                auto ne = si->components.getDeclaration<IR::NamedExpression>(e->member.name);
+                BUG_CHECK(ne != nullptr,
+                          "Could not find field %1% in initializer %2%", e->member, si);
+                return CloneConstants::clone(ne->expression);
+            } else {
+                BUG("Unexpected initializer: %1%", expr);
+            }
         }
     }
     return result;
@@ -635,6 +661,8 @@ const IR::Node* DoConstantFolding::postorder(IR::Concat* e) {
     }
 
     auto resultType = IR::Type_Bits::get(lt->size + rt->size, lt->isSigned);
+    if (overflowWidth(e, resultType->size))
+        return e;
     big_int value = Util::shift_left(left->value, static_cast<unsigned>(rt->size)) + right->value;
     return new IR::Constant(e->srcInfo, resultType, value, left->base);
 }
@@ -704,6 +732,8 @@ const IR::Node* DoConstantFolding::shift(const IR::Operation_Binary* e) {
 
     big_int value = cl->value;
     unsigned shift = static_cast<unsigned>(cr->asInt());
+    if (overflowWidth(e, shift))
+        return e;
 
     auto tb = left->type->to<IR::Type_Bits>();
     if (tb != nullptr) {

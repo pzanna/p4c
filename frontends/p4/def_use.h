@@ -74,7 +74,7 @@ class BaseLocation : public StorageLocation {
                 type->is<IR::Type_Boolean>() || type->is<IR::Type_Var>() ||
                 type->is<IR::Type_Tuple>() || type->is<IR::Type_Error>() ||
                 type->is<IR::Type_Varbits>() || type->is<IR::Type_Newtype>() ||
-                type->is<IR::Type_SerEnum>(),
+                type->is<IR::Type_SerEnum>() || type->is<IR::Type_List>(),
                 "%1%: unexpected type", type); }
     void addValidBits(LocationSet*) const override {}
     void addLastIndexField(LocationSet*) const override {}
@@ -146,10 +146,7 @@ class ArrayLocation : public StorageLocation {
 };
 
 class StorageFactory {
-    TypeMap* typeMap;
  public:
-    explicit StorageFactory(TypeMap* typeMap) : typeMap(typeMap)
-    { CHECK_NULL(typeMap); }
     StorageLocation* create(const IR::Type* type, cstring name) const;
 
     static const cstring validFieldName;
@@ -207,7 +204,7 @@ class StorageMap {
     TypeMap*       typeMap;
 
     StorageMap(ReferenceMap* refMap, TypeMap* typeMap) :
-            factory(typeMap), refMap(refMap), typeMap(typeMap)
+            refMap(refMap), typeMap(typeMap)
     { CHECK_NULL(refMap); CHECK_NULL(typeMap); }
     StorageLocation* add(const IR::IDeclaration* decl) {
         CHECK_NULL(decl);
@@ -230,7 +227,7 @@ class StorageMap {
     }
     virtual void dbprint(std::ostream& out) const {
         for (auto &it : storage)
-            out << it.first << ": " << it.second << std::endl;
+            out << it.first << ": " << it.second << IndentCtl::endl;
     }
 };
 
@@ -354,14 +351,14 @@ class Definitions : public IHasDbPrint {
     bool operator==(const Definitions& other) const;
     void dbprint(std::ostream& out) const {
         if (unreachable) {
-            out << "  Unreachable" << std::endl;
+            out << "  Unreachable" << IndentCtl::endl;
         }
         if (definitions.empty())
             out << "  Empty definitions";
         bool first = true;
         for (auto d : definitions) {
             if (!first)
-                out << std::endl;
+                out << IndentCtl::endl;
             out << "  " << *d.first << "=>" << *d.second;
             first = false;
         }
@@ -407,7 +404,7 @@ class AllDefinitions : public IHasDbPrint {
     }
     void dbprint(std::ostream& out) const {
         for (auto e : atPoint)
-            out << e.first << " => " << e.second << std::endl;
+            out << e.first << " => " << e.second << IndentCtl::endl;
     }
 };
 

@@ -62,7 +62,7 @@ parser prs(packet_in p, out Headers_t headers, inout metadata meta, inout standa
 control pipe(inout Headers_t headers, inout metadata meta, inout standard_metadata std_meta) {
     @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
-    bit<32> tmp_0;
+    @name("pipe.tmp") bit<32> tmp_0;
     @name("pipe.ip_modify_saddr") action ip_modify_saddr(bit<32> srcAddr) {
         headers.ipv4.srcAddr = srcAddr;
     }
@@ -114,7 +114,7 @@ control pipe(inout Headers_t headers, inout metadata meta, inout standard_metada
             Reject();
             NoAction_0();
         }
-        const default_action = NoAction_0();
+        default_action = NoAction_0();
     }
     apply {
         filter_tbl_0.apply();

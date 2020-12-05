@@ -88,7 +88,7 @@ struct headers {
 }
 
 parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    bit<64> tmp;
+    @name("ParserImpl.tmp_0") bit<64> tmp_0;
     @name(".parse_cpu_header") state parse_cpu_header {
         packet.extract<cpu_header_t>(hdr.cpu_header);
         meta._meta_if_index10 = hdr.cpu_header.if_index;
@@ -119,8 +119,8 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     }
     @name(".start") state start {
         meta._meta_if_index10 = (bit<8>)standard_metadata.ingress_port;
-        tmp = packet.lookahead<bit<64>>();
-        transition select(tmp) {
+        tmp_0 = packet.lookahead<bit<64>>();
+        transition select(tmp_0) {
             64w0: parse_cpu_header;
             default: parse_ethernet;
         }
@@ -179,7 +179,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 struct tuple_0 {
-    standard_metadata_t field;
+    standard_metadata_t f0;
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
@@ -313,34 +313,34 @@ control DeparserImpl(packet_out packet, in headers hdr) {
 }
 
 struct tuple_1 {
-    bit<4>  field_0;
-    bit<4>  field_1;
-    bit<8>  field_2;
-    bit<16> field_3;
-    bit<16> field_4;
-    bit<3>  field_5;
-    bit<13> field_6;
-    bit<8>  field_7;
-    bit<8>  field_8;
-    bit<32> field_9;
-    bit<32> field_10;
+    bit<4>  f0;
+    bit<4>  f1;
+    bit<8>  f2;
+    bit<16> f3;
+    bit<16> f4;
+    bit<3>  f5;
+    bit<13> f6;
+    bit<8>  f7;
+    bit<8>  f8;
+    bit<32> f9;
+    bit<32> f10;
 }
 
 struct tuple_2 {
-    bit<32> field_11;
-    bit<32> field_12;
-    bit<8>  field_13;
-    bit<8>  field_14;
-    bit<16> field_15;
-    bit<16> field_16;
-    bit<16> field_17;
-    bit<32> field_18;
-    bit<32> field_19;
-    bit<4>  field_20;
-    bit<4>  field_21;
-    bit<8>  field_22;
-    bit<16> field_23;
-    bit<16> field_24;
+    bit<32> f0;
+    bit<32> f1;
+    bit<8>  f2;
+    bit<8>  f3;
+    bit<16> f4;
+    bit<16> f5;
+    bit<16> f6;
+    bit<32> f7;
+    bit<32> f8;
+    bit<4>  f9;
+    bit<4>  f10;
+    bit<8>  f11;
+    bit<16> f12;
+    bit<16> f13;
 }
 
 control verifyChecksum(inout headers hdr, inout metadata meta) {

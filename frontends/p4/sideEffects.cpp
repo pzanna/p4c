@@ -138,6 +138,61 @@ const IR::Node* DoSimplifyExpressions::preorder(IR::Operation_Unary* expression)
     return expression;
 }
 
+const IR::Node* DoSimplifyExpressions::preorder(IR::StructExpression* expression) {
+    LOG3("Visiting " << dbp(expression));
+    bool foundEffect = false;
+    for (auto v : expression->components) {
+        if (SideEffects::check(v->expression, refMap, typeMap)) {
+            foundEffect = true;
+            break;
+        }
+    }
+    if (!foundEffect)
+        return expression;
+    // allocate temporaries for all members in order.
+    // this will handle cases like a = (S) { b, f(b) }, where f can mutate b.
+    IR::IndexedVector<IR::NamedExpression> vec;
+    LOG3("Dismantling " << dbp(expression));
+    for (auto &v : expression->components) {
+        auto t = typeMap->getType(v->expression, true);
+        auto tmp = createTemporary(t);
+        visit(v);
+        auto path = addAssignment(expression->srcInfo, tmp, v->expression);
+        typeMap->setType(path, t);
+        // We cannot directly mutate v, because of https://github.com/p4lang/p4c/issues/43
+        vec.push_back(new IR::NamedExpression(v->name, path));
+    }
+    expression->components = vec;
+    prune();
+    return expression;
+}
+
+const IR::Node* DoSimplifyExpressions::preorder(IR::ListExpression* expression) {
+    LOG3("Visiting " << dbp(expression));
+    bool foundEffect = false;
+    for (auto v : expression->components) {
+        if (SideEffects::check(v, refMap, typeMap)) {
+            foundEffect = true;
+            break;
+        }
+    }
+    if (!foundEffect)
+        return expression;
+    // allocate temporaries for all members in order.
+    // this will handle cases like a = { b, f(b) }, where f can mutate b.
+    LOG3("Dismantling " << dbp(expression));
+    for (auto &v : expression->components) {
+        auto t = typeMap->getType(v, true);
+        auto tmp = createTemporary(t);
+        visit(v);
+        auto path = addAssignment(expression->srcInfo, tmp, v);
+        v = path;
+        typeMap->setType(path, t);
+    }
+    prune();
+    return expression;
+}
+
 const IR::Node* DoSimplifyExpressions::preorder(IR::Operation_Binary* expression) {
     LOG3("Visiting " << dbp(expression));
     auto original = getOriginal<IR::Operation_Binary>();
@@ -307,6 +362,17 @@ const IR::Node* DoSimplifyExpressions::preorder(IR::MethodCallExpression* mce) {
             hasSideEffects.emplace(arg->expression);
             continue;
         }
+
+        // If the parameter is out and the argument is a slice then
+        // also use a temporary; makes the job of def-use analysis easier
+        if (arg->expression->is<IR::Slice>() &&
+            p->hasOut()) {
+            LOG3("Using temporary for " << dbp(mce) <<
+                 " param " << dbp(p) << " since it is an out slice");
+            useTemporary.emplace(p);
+            continue;
+        }
+
         // If the parameter contains header values and the
         // argument is a list expression or a struct initializer
         // then we also use a temporary.  This makes the job of
@@ -344,6 +410,9 @@ const IR::Node* DoSimplifyExpressions::preorder(IR::MethodCallExpression* mce) {
                 if (mayAlias(arg1->expression, arg2->expression)) {
                     LOG3("Using temporary for " << dbp(mce) <<
                          " param " << dbp(p1) << " aliasing" << dbp(p2));
+                    if (p1->hasOut() && p2->hasOut())
+                        ::warning(ErrorType::WARN_ORDERING,
+                                  "%1%: 'out' argument has fields in common with %2%", arg1, arg2);
                     useTemporary.emplace(p1);
                     useTemporary.emplace(p2);
                     break;

@@ -493,6 +493,7 @@ bool ToP4::process(const IR::Type_StructLike* t, const char* name) {
         visit(t->annotations);
         builder.appendFormat("%s ", name); }
     builder.append(t->name);
+    visit(t->typeParameters);
     if (!isDeclaration)
         return false;
     builder.spc();
@@ -558,40 +559,18 @@ bool ToP4::preorder(const IR::Type_Control* t) {
 ///////////////////////
 
 bool ToP4::preorder(const IR::Constant* c) {
-    big_int value = c->value;
-    big_int zero = 0;
-    if (value < zero) {
-        builder.append("-");
-        value = -value;
-    }
-
     const IR::Type_Bits* tb = dynamic_cast<const IR::Type_Bits*>(c->type);
-    if (tb != nullptr) {
-        builder.appendFormat("%d", tb->size);
-        builder.append(tb->isSigned ? "s" : "w");
+    unsigned width;
+    bool sign;
+    if (tb == nullptr) {
+        width = 0;
+        sign = false;
+    } else {
+        width = tb->size;
+        sign = tb->isSigned;
     }
-    switch (c->base) {
-        case 2:
-            builder.append("0b");
-            break;
-        case 8:
-            builder.append("0o");
-            break;
-        case 16:
-            builder.append("0x");
-            break;
-        case 10:
-            break;
-        default:
-            BUG("%1%: Unexpected base %2%", c, c->base);
-    }
-    std::deque<char> buf;
-    do {
-        buf.push_front("0123456789abcdef"[static_cast<int>(static_cast<big_int>(value % c->base))]);
-        value = value / c->base;
-    } while (value > 0);
-    for (auto ch : buf)
-        builder.appendFormat("%c", ch);
+    cstring s = Util::toString(c->value, width, sign, c->base);
+    builder.append(s);
     return false;
 }
 
@@ -877,9 +856,9 @@ bool ToP4::preorder(const IR::NamedExpression* e) {
 bool ToP4::preorder(const IR::StructExpression* e) {
     if (expressionPrecedence > DBPrint::Prec_Prefix)
         builder.append("(");
-    if (e->typeName != nullptr) {
+    if (e->structType != nullptr) {
         builder.append("(");
-        visit(e->typeName);
+        visit(e->structType);
         builder.append(")");
     }
     builder.append("{");
@@ -1126,7 +1105,7 @@ bool ToP4::preorder(const IR::SwitchStatement* s) {
     setVecSep("\n", "\n");
     preorder(&s->cases);
     doneVec();
-    builder.blockEnd(true);
+    builder.blockEnd(false);
     return false;
 }
 
@@ -1401,7 +1380,6 @@ bool ToP4::preorder(const IR::EntriesList *l) {
     builder.decreaseIndent();
     builder.emitIndent();
     builder.append("}");
-    builder.newline();
     return false;
 }
 

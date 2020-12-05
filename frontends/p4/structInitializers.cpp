@@ -55,6 +55,10 @@ convert(const IR::Expression* expression, const IR::Type* type) {
                     expression->srcInfo, type, type, *si);
                 return result;
             }
+        } else if (auto mux = expression->to<IR::Mux>()) {
+            auto e1 = convert(mux->e1, type);
+            auto e2 = convert(mux->e2, type);
+            return new IR::Mux(mux->e0, e1, e2);
         }
     } else if (auto tup = type->to<IR::Type_BaseList>()) {
         auto le = expression->to<IR::ListExpression>();
@@ -79,9 +83,24 @@ convert(const IR::Expression* expression, const IR::Type* type) {
 
 const IR::Node* CreateStructInitializers::postorder(IR::AssignmentStatement* statement) {
     auto type = typeMap->getType(statement->left);
-    auto init = convert(statement->right, type);
-    if (init != statement->right)
-        statement->right = init;
+    statement->right = convert(statement->right, type);
+    return statement;
+}
+
+const IR::Node* CreateStructInitializers::postorder(IR::ReturnStatement* statement) {
+    if (statement->expression == nullptr)
+        return statement;
+    auto func = findOrigCtxt<IR::Function>();
+    if (func == nullptr)
+        return statement;
+
+    auto ftype = typeMap->getType(func);
+    BUG_CHECK(ftype->is<IR::Type_Method>(), "%1%: expected a method type for function", ftype);
+    auto mt = ftype->to<IR::Type_Method>();
+    auto returnType = mt->returnType;
+    CHECK_NULL(returnType);
+
+    statement->expression = convert(statement->expression, returnType);
     return statement;
 }
 
@@ -89,9 +108,7 @@ const IR::Node* CreateStructInitializers::postorder(IR::Declaration_Variable* de
     if (decl->initializer == nullptr)
         return decl;
     auto type = typeMap->getTypeType(decl->type, true);
-    auto init = convert(decl->initializer, type);
-    if (init != decl->initializer)
-        decl->initializer = init;
+    decl->initializer = convert(decl->initializer, type);
     return decl;
 }
 

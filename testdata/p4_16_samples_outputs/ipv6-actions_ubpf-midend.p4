@@ -77,7 +77,7 @@ parser prs(packet_in p, out Headers_t headers, inout metadata meta, inout standa
 }
 
 control pipe(inout Headers_t headers, inout metadata meta, inout standard_metadata std_meta) {
-    bit<128> tmp_0;
+    @name("pipe.tmp") bit<128> tmp_0;
     @noWarn("unused") @name(".NoAction") action NoAction_0() {
     }
     @name("pipe.Reject") action Reject() {
@@ -122,7 +122,7 @@ control pipe(inout Headers_t headers, inout metadata meta, inout standard_metada
             Reject();
             NoAction_0();
         }
-        const default_action = NoAction_0();
+        default_action = NoAction_0();
     }
     apply {
         filter_tbl_0.apply();
@@ -130,20 +130,20 @@ control pipe(inout Headers_t headers, inout metadata meta, inout standard_metada
 }
 
 control dprs(packet_out packet, in Headers_t headers) {
-    @hidden action ipv6actions_ubpf170() {
+    @hidden action ipv6actions_ubpf168() {
         packet.emit<Ethernet_h>(headers.ethernet);
         packet.emit<mpls_h>(headers.mpls);
         packet.emit<IPv6_h>(headers.ipv6);
         packet.emit<IPv4_h>(headers.ipv4);
     }
-    @hidden table tbl_ipv6actions_ubpf170 {
+    @hidden table tbl_ipv6actions_ubpf168 {
         actions = {
-            ipv6actions_ubpf170();
+            ipv6actions_ubpf168();
         }
-        const default_action = ipv6actions_ubpf170();
+        const default_action = ipv6actions_ubpf168();
     }
     apply {
-        tbl_ipv6actions_ubpf170.apply();
+        tbl_ipv6actions_ubpf168.apply();
     }
 }
 
